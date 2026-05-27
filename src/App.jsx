@@ -1,11 +1,14 @@
 import { useState, useRef, useCallback } from "react";
 
-/* ── 환경별 API URL ───────────────────────────────────── */
+/* ── 환경별 API URL / KEY ────────────────────────────── */
 // 개발: Vite 프록시 사용 (CORS 회피)
-// 프록덕션(GitHub Pages): Anthropic 직접 호웉
+// 프록덕션: Anthropic 직접 호출
 const API_URL = import.meta.env.PROD
   ? "https://api.anthropic.com/v1/messages"
   : "/api/anthropic/v1/messages";
+
+// 빌드 시 주입된 API 키 (없으면 빈 문자열)
+const BUNDLED_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY || "";
 
 /* ── 유틸 ────────────────────────────────────────────── */
 function getMediaType(file) {
@@ -41,8 +44,8 @@ async function callAPI(base64, mediaType, prompt, apiKey) {
 }
 
 const PROMPT_DEPTS = `이 이미지는 병원 외래 스케줄 표입니다.
-이미지에 있는 모든 직료과 이름을 추출해서, 줄바꿈으로 구분해서 나열하세요.
-직료과 이름만 출력하고 다른 설명은 하지 마세요.
+이미지에 있는 모든 진료과 이름을 추출해서, 줄바꿈으로 구분해서 나열하세요.
+진료과 이름만 출력하고 다른 설명은 하지 마세요.
 
 예시:
 감염내과
@@ -89,7 +92,7 @@ function parseDeptDoctors(text, department) {
     }).filter(Boolean);
 }
 
-/* ── 요일별 그리드 컴포넌트 ──────────────────────────── */
+/* ── 요일별 그리드 ──────────────────────────────── */
 const DAYS = ["월", "화", "수", "목", "금", "토"];
 
 function DayView({ doctors, search, deptFilter }) {
@@ -130,9 +133,7 @@ function DayView({ doctors, search, deptFilter }) {
                 padding: "9px 8px", background: "#f9f9f9",
                 borderBottom: "0.5px solid #ddd", borderLeft: "0.5px solid #f0f0f0",
                 fontSize: 12, fontWeight: 600, color: "#444", textAlign: "center",
-              }}>
-                {day}요일
-              </th>
+              }}>{day}요일</th>
             ))}
           </tr>
         </thead>
@@ -144,9 +145,7 @@ function DayView({ doctors, search, deptFilter }) {
                 borderBottom: "0.5px solid #eee", borderRight: "0.5px solid #ddd",
                 color: period === "AM" ? "#085041" : "#633806",
                 background: period === "AM" ? "#f0faf5" : "#fef9f0",
-              }}>
-                {period === "AM" ? "오전" : "오후"}
-              </td>
+              }}>{period === "AM" ? "오전" : "오후"}</td>
               {DAYS.map(day => {
                 const list = matrix[`${day}_${period}`];
                 return (
@@ -183,9 +182,15 @@ function DayView({ doctors, search, deptFilter }) {
 
 /* ── App ──────────────────────────────────────────────── */
 export default function App() {
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem("anthropic_api_key") || "");
+  // BUNDLED_API_KEY 있으면 자동 사용, 없으면 localStorage 또는 입력
+  const [apiKey, setApiKey] = useState(() =>
+    BUNDLED_API_KEY || localStorage.getItem("anthropic_api_key") || ""
+  );
   const [apiKeyInput, setApiKeyInput] = useState("");
-  const [showApiKeySetup, setShowApiKeySetup] = useState(!localStorage.getItem("anthropic_api_key"));
+  // 번들링된 키가 있으면 입력 화면 스킵
+  const [showApiKeySetup, setShowApiKeySetup] = useState(
+    !BUNDLED_API_KEY && !localStorage.getItem("anthropic_api_key")
+  );
 
   const [images, setImages] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -254,13 +259,10 @@ export default function App() {
       for (let imgIdx = 0; imgIdx < images.length; imgIdx++) {
         const img = images[imgIdx];
         setProgress({ imgLabel: img.fileName, imgCurrent: imgIdx + 1, imgTotal: images.length, deptLabel: "진료과 목록 파악 중...", deptCurrent: 0, deptTotal: 0 });
-
         const deptsRaw = await callAPI(img.base64, img.mediaType, PROMPT_DEPTS, apiKey);
         setRawLogs(l => [...l, `[이미지 ${imgIdx + 1}: ${img.fileName}]\n[진료과 목록]\n${deptsRaw}`]);
-
         const depts = deptsRaw.split("\n").map(l => l.trim()).filter(l => l && l.length > 1 && !l.includes("|"));
         if (!depts.length) { setRawLogs(l => [...l, `[이미지 ${imgIdx + 1}] 진료과 없음, 건너뜀`]); continue; }
-
         for (let di = 0; di < depts.length; di++) {
           const dept = depts[di];
           setProgress({ imgLabel: img.fileName, imgCurrent: imgIdx + 1, imgTotal: images.length, deptLabel: `${dept} 의사 추출 중...`, deptCurrent: di + 1, deptTotal: depts.length });
@@ -275,7 +277,6 @@ export default function App() {
         }
         if (imgIdx < images.length - 1) await new Promise(r => setTimeout(r, 500));
       }
-
       if (!allDoctors.length) throw new Error("의사 정보를 추출할 수 없었습니다.");
       const unique = allDoctors.filter((d, i, arr) =>
         arr.findIndex(x => x.name === d.name && x.department === d.department) === i
@@ -334,6 +335,7 @@ export default function App() {
 
   return (
     <div style={s.wrap}>
+      {/* 헤더 */}
       <div style={s.header}>
         <div style={s.iconBox}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#E1F5EE" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -345,7 +347,8 @@ export default function App() {
           <div style={{ fontSize: 16, fontWeight: 500 }}>병원 스케줄 분석 에이전트</div>
           <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>외래 스케줄 사진 → 전체 의사 자동 추출 · MR 전용</div>
         </div>
-        {apiKey && (
+        {/* 번들링 키가 없을 때만 API키 변경 버튼 표시 */}
+        {!BUNDLED_API_KEY && apiKey && (
           <button style={{ ...s.btnSm, fontSize: 11, color: "#aaa" }}
             onClick={() => { localStorage.removeItem("anthropic_api_key"); setApiKey(""); setShowApiKeySetup(true); }}>
             🔑 API키 변경
@@ -353,6 +356,7 @@ export default function App() {
         )}
       </div>
 
+      {/* API 키 입력 (BUNDLED_API_KEY가 없을 때만 표시) */}
       {showApiKeySetup && (
         <div style={s.apiKeyBox}>
           <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>🔑 Anthropic API 키 설정</div>
@@ -387,7 +391,6 @@ export default function App() {
                 <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: "none" }}
                   onChange={e => addFiles(e.target.files)} />
               </div>
-
               {images.length > 0 && (
                 <div style={{ marginTop: 14 }}>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
@@ -475,7 +478,6 @@ export default function App() {
                   <button style={{ ...s.btnSm, color: "#888" }} onClick={reset}>↺ 새 분석</button>
                 </div>
               </div>
-
               <div style={{ display: "flex", gap: 8, padding: "10px 16px", borderBottom: "0.5px solid #eee", flexWrap: "wrap", alignItems: "center" }}>
                 <div style={{ display: "flex", background: "#f4f4f4", borderRadius: 8, padding: 2, flexShrink: 0 }}>
                   {[["table", "☰ 목록"], ["day", "📅 요일별"]].map(([mode, label]) => (
@@ -500,7 +502,6 @@ export default function App() {
                   </select>
                 )}
               </div>
-
               {viewMode === "table" && (
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
@@ -536,11 +537,9 @@ export default function App() {
                   </table>
                 </div>
               )}
-
               {viewMode === "day" && (
                 <DayView doctors={doctors} search={search} deptFilter={deptFilter} />
               )}
-
               <div style={{ padding: "12px 16px", borderTop: "0.5px solid #eee" }}>
                 <button style={{ fontSize: 12, color: "#aaa", cursor: "pointer", background: "none", border: "none", display: "flex", alignItems: "center", gap: 6, padding: 0 }}
                   onClick={() => setShowRaw(r => !r)}>
