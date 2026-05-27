@@ -1,5 +1,12 @@
 import { useState, useRef, useCallback } from "react";
 
+/* ── 환경별 API URL ───────────────────────────────────── */
+// 개발: Vite 프록시 사용 (CORS 회피)
+// 프록덕션(GitHub Pages): Anthropic 직접 호웉
+const API_URL = import.meta.env.PROD
+  ? "https://api.anthropic.com/v1/messages"
+  : "/api/anthropic/v1/messages";
+
 /* ── 유틸 ────────────────────────────────────────────── */
 function getMediaType(file) {
   const t = file.type;
@@ -11,7 +18,7 @@ function getMediaType(file) {
 }
 
 async function callAPI(base64, mediaType, prompt, apiKey) {
-  const res = await fetch("/api/anthropic/v1/messages", {
+  const res = await fetch(API_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -34,8 +41,8 @@ async function callAPI(base64, mediaType, prompt, apiKey) {
 }
 
 const PROMPT_DEPTS = `이 이미지는 병원 외래 스케줄 표입니다.
-이미지에 있는 모든 진료과 이름을 추출해서, 줄바꿈으로 구분해서 나열하세요.
-진료과 이름만 출력하고 다른 설명은 하지 마세요.
+이미지에 있는 모든 직료과 이름을 추출해서, 줄바꿈으로 구분해서 나열하세요.
+직료과 이름만 출력하고 다른 설명은 하지 마세요.
 
 예시:
 감염내과
@@ -92,7 +99,6 @@ function DayView({ doctors, search, deptFilter }) {
       && (!deptFilter || d.department === deptFilter);
   });
 
-  // 요일×오전/오후 매트릭스 구성
   const matrix = {};
   DAYS.forEach(day => { matrix[`${day}_AM`] = []; matrix[`${day}_PM`] = []; });
   filtered.forEach(doc => {
@@ -177,33 +183,28 @@ function DayView({ doctors, search, deptFilter }) {
 
 /* ── App ──────────────────────────────────────────────── */
 export default function App() {
-  // API 키
   const [apiKey, setApiKey] = useState(() => localStorage.getItem("anthropic_api_key") || "");
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [showApiKeySetup, setShowApiKeySetup] = useState(!localStorage.getItem("anthropic_api_key"));
 
-  // 다중 이미지
-  const [images, setImages] = useState([]); // [{id, src, base64, mediaType, fileName, fileSize}]
+  const [images, setImages] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
   const idRef = useRef(0);
   const fileRef = useRef();
 
-  // 분석 상태
-  const [stage, setStage] = useState("upload"); // upload | preview | analyzing | results | error
+  const [stage, setStage] = useState("upload");
   const [progress, setProgress] = useState({ imgLabel: "", imgCurrent: 0, imgTotal: 0, deptLabel: "", deptCurrent: 0, deptTotal: 0 });
   const [doctors, setDoctors] = useState([]);
   const [rawLogs, setRawLogs] = useState([]);
   const [showRaw, setShowRaw] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  // 결과 뷰
-  const [viewMode, setViewMode] = useState("table"); // table | day
+  const [viewMode, setViewMode] = useState("table");
   const [search, setSearch] = useState("");
   const [deptFilter, setDeptFilter] = useState("");
   const [dayFilter, setDayFilter] = useState("");
   const [copied, setCopied] = useState(false);
 
-  /* API 키 */
   const saveApiKey = () => {
     const key = apiKeyInput.trim();
     if (!key.startsWith("sk-ant-")) { alert("올바른 Anthropic API 키를 입력하세요 (sk-ant- 로 시작)"); return; }
@@ -211,7 +212,6 @@ export default function App() {
     setApiKey(key); setShowApiKeySetup(false); setApiKeyInput("");
   };
 
-  /* 파일 추가 */
   const addFiles = useCallback((files) => {
     Array.from(files).filter(f => f.type.startsWith("image/")).forEach(file => {
       const mt = getMediaType(file);
@@ -224,7 +224,7 @@ export default function App() {
           mediaType: mt, fileName: file.name,
           fileSize: (file.size / 1024).toFixed(1) + " KB",
         };
-        setImages(prev => { const next = [...prev, img]; return next; });
+        setImages(prev => [...prev, img]);
         setStage(s => s === "upload" ? "preview" : s);
       };
       reader.readAsDataURL(file);
@@ -247,7 +247,6 @@ export default function App() {
     if (fileRef.current) fileRef.current.value = "";
   };
 
-  /* 분석 */
   const analyze = async () => {
     setStage("analyzing"); setRawLogs([]);
     const allDoctors = [];
@@ -287,7 +286,6 @@ export default function App() {
     }
   };
 
-  /* 필터 */
   const filtered = doctors.filter(d => {
     const q = search.toLowerCase();
     return (!q || (d.name||"").toLowerCase().includes(q) || (d.department||"").toLowerCase().includes(q))
@@ -309,7 +307,6 @@ export default function App() {
     ? Math.round(((progress.imgCurrent - 1 + (progress.deptTotal > 0 ? progress.deptCurrent / progress.deptTotal : 0)) / progress.imgTotal) * 100)
     : 5;
 
-  /* 스타일 */
   const s = {
     wrap: { maxWidth: 960, margin: "0 auto", padding: "1.5rem", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color: "#111" },
     header: { display: "flex", alignItems: "center", gap: 12, marginBottom: "1.5rem", paddingBottom: "1rem", borderBottom: "0.5px solid #eee" },
@@ -337,7 +334,6 @@ export default function App() {
 
   return (
     <div style={s.wrap}>
-      {/* 헤더 */}
       <div style={s.header}>
         <div style={s.iconBox}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#E1F5EE" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -357,7 +353,6 @@ export default function App() {
         )}
       </div>
 
-      {/* API 키 설정 */}
       {showApiKeySetup && (
         <div style={s.apiKeyBox}>
           <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>🔑 Anthropic API 키 설정</div>
@@ -372,10 +367,8 @@ export default function App() {
 
       {!showApiKeySetup && (
         <>
-          {/* ── 업로드 & 미리보기 ── */}
           {(stage === "upload" || stage === "preview") && (
             <div>
-              {/* 드롭존 - 항상 표시 (추가 업로드 가능) */}
               <div style={s.dropZone}
                 onClick={() => fileRef.current?.click()}
                 onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
@@ -395,7 +388,6 @@ export default function App() {
                   onChange={e => addFiles(e.target.files)} />
               </div>
 
-              {/* 썸네일 그리드 */}
               {images.length > 0 && (
                 <div style={{ marginTop: 14 }}>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
@@ -405,12 +397,10 @@ export default function App() {
                           width: "100%", aspectRatio: "3/4", objectFit: "cover",
                           borderRadius: 8, border: "0.5px solid #ddd", display: "block",
                         }} />
-                        {/* 번호 뱃지 */}
                         <div style={{
                           position: "absolute", top: 4, left: 5, fontSize: 10, fontWeight: 700,
                           color: "#fff", background: "rgba(0,0,0,0.45)", borderRadius: 4, padding: "1px 5px",
                         }}>{idx + 1}</div>
-                        {/* 삭제 버튼 */}
                         <button onClick={() => removeImage(img.id)} style={{
                           position: "absolute", top: 4, right: 4, width: 18, height: 18,
                           borderRadius: "50%", background: "rgba(0,0,0,0.5)", border: "none",
@@ -424,9 +414,7 @@ export default function App() {
                     ))}
                   </div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <button style={s.btnPrimary} onClick={analyze}>
-                      ✦ {images.length}장 전체 분석 시작
-                    </button>
+                    <button style={s.btnPrimary} onClick={analyze}>✦ {images.length}장 전체 분석 시작</button>
                     <button style={s.btnGhost} onClick={reset}>↺ 초기화</button>
                     <span style={{ fontSize: 12, color: "#aaa" }}>{images.length}개 이미지 준비됨</span>
                   </div>
@@ -435,7 +423,6 @@ export default function App() {
             </div>
           )}
 
-          {/* ── 분석 중 ── */}
           {stage === "analyzing" && (
             <div style={s.progressCard}>
               <div style={{ width: 28, height: 28, borderRadius: "50%", border: "2.5px solid #eee", borderTopColor: "#0F6E56", animation: "spin 0.8s linear infinite" }} />
@@ -447,9 +434,7 @@ export default function App() {
                 </div>
                 <div style={{ fontSize: 14, fontWeight: 500 }}>{progress.deptLabel}</div>
                 {progress.deptTotal > 0 && (
-                  <div style={{ fontSize: 12, color: "#bbb", marginTop: 4 }}>
-                    진료과 {progress.deptCurrent} / {progress.deptTotal}
-                  </div>
+                  <div style={{ fontSize: 12, color: "#bbb", marginTop: 4 }}>진료과 {progress.deptCurrent} / {progress.deptTotal}</div>
                 )}
               </div>
               <div style={s.progressBar}>
@@ -459,21 +444,15 @@ export default function App() {
             </div>
           )}
 
-          {/* ── 오류 ── */}
           {stage === "error" && (
             <div>
               <div style={s.errorBox}>
                 <div style={{ display: "flex", gap: 8, marginBottom: rawLogs.length ? 12 : 0 }}>
-                  <span>⚠</span>
-                  <div><strong>분석 오류</strong><br />{errorMsg}</div>
+                  <span>⚠</span><div><strong>분석 오류</strong><br />{errorMsg}</div>
                 </div>
                 {rawLogs.length > 0 && (
-                  <>
-                    <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}>진행 로그:</div>
-                    <div style={{ ...s.rawBox, background: "#fff5f5", color: "#791F1F", border: "0.5px solid #F7C1C1" }}>
-                      {rawLogs.join("\n\n---\n\n")}
-                    </div>
-                  </>
+                  <><div style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}>진행 로그:</div>
+                  <div style={{ ...s.rawBox, background: "#fff5f5", color: "#791F1F", border: "0.5px solid #F7C1C1" }}>{rawLogs.join("\n\n---\n\n")}</div></>
                 )}
               </div>
               <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
@@ -483,17 +462,13 @@ export default function App() {
             </div>
           )}
 
-          {/* ── 결과 ── */}
           {stage === "results" && (
             <div style={s.card}>
-              {/* 결과 헤더 */}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "0.5px solid #eee", flexWrap: "wrap", gap: 8 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 500 }}>
                   추출된 외래 일정
                   <span style={s.countBadge}>{viewMode === "table" ? filtered.length : doctors.length}명</span>
-                  <span style={{ fontSize: 11, color: "#aaa", fontWeight: 400 }}>
-                    {allDepts.length}개 진료과 · {images.length}장 분석
-                  </span>
+                  <span style={{ fontSize: 11, color: "#aaa", fontWeight: 400 }}>{allDepts.length}개 진료과 · {images.length}장 분석</span>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button style={s.btnSm} onClick={copyTable}>{copied ? "✓ 복사됨" : "⎘ 복사"}</button>
@@ -501,9 +476,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 뷰 모드 토글 + 필터 */}
               <div style={{ display: "flex", gap: 8, padding: "10px 16px", borderBottom: "0.5px solid #eee", flexWrap: "wrap", alignItems: "center" }}>
-                {/* 목록 / 요일별 토글 */}
                 <div style={{ display: "flex", background: "#f4f4f4", borderRadius: 8, padding: 2, flexShrink: 0 }}>
                   {[["table", "☰ 목록"], ["day", "📅 요일별"]].map(([mode, label]) => (
                     <button key={mode} onClick={() => setViewMode(mode)} style={{
@@ -515,18 +488,11 @@ export default function App() {
                     }}>{label}</button>
                   ))}
                 </div>
-
-                {/* 검색 */}
-                <input style={s.filterInput} placeholder="의사명 또는 진료과 검색..." value={search}
-                  onChange={e => setSearch(e.target.value)} />
-
-                {/* 진료과 필터 */}
+                <input style={s.filterInput} placeholder="의사명 또는 진료과 검색..." value={search} onChange={e => setSearch(e.target.value)} />
                 <select style={s.filterSelect} value={deptFilter} onChange={e => setDeptFilter(e.target.value)}>
                   <option value="">전체 진료과</option>
                   {allDepts.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
-
-                {/* 요일 필터 - 목록 뷰에서만 */}
                 {viewMode === "table" && (
                   <select style={s.filterSelect} value={dayFilter} onChange={e => setDayFilter(e.target.value)}>
                     <option value="">전체 요일</option>
@@ -535,7 +501,6 @@ export default function App() {
                 )}
               </div>
 
-              {/* 목록 뷰 */}
               {viewMode === "table" && (
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
@@ -547,36 +512,35 @@ export default function App() {
                       <tr>{["의사명","진료과","외래 일정","진료실","비고"].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
                     </thead>
                     <tbody>
-                      {filtered.length === 0 ? (
-                        <tr><td colSpan={5} style={{ ...s.td, textAlign: "center", color: "#bbb", padding: "2rem" }}>검색 결과가 없습니다</td></tr>
-                      ) : filtered.map((d, i) => (
-                        <tr key={i}>
-                          <td style={s.td}><span style={{ fontWeight: 500 }}>{d.name||"-"}</span></td>
-                          <td style={s.td}><span style={s.deptBadge}>{d.department||"-"}</span></td>
-                          <td style={s.td}>
-                            {!(d.schedule||[]).length
-                              ? <span style={{ color: "#bbb", fontSize: 12 }}>정보 없음</span>
-                              : (d.schedule||[]).map((sc, j) => (
-                                <span key={j} style={sc.period === "PM" ? s.pillPM : s.pillAM}>
-                                  {sc.day} {sc.period === "PM" ? "오후" : "오전"}
-                                </span>
-                              ))}
-                          </td>
-                          <td style={{ ...s.td, fontFamily: "monospace", fontSize: 12 }}>{d.room||"-"}</td>
-                          <td style={{ ...s.td, fontSize: 12, color: "#666" }}>{d.notes||"-"}</td>
-                        </tr>
-                      ))}
+                      {filtered.length === 0
+                        ? <tr><td colSpan={5} style={{ ...s.td, textAlign: "center", color: "#bbb", padding: "2rem" }}>검색 결과가 없습니다</td></tr>
+                        : filtered.map((d, i) => (
+                          <tr key={i}>
+                            <td style={s.td}><span style={{ fontWeight: 500 }}>{d.name||"-"}</span></td>
+                            <td style={s.td}><span style={s.deptBadge}>{d.department||"-"}</span></td>
+                            <td style={s.td}>
+                              {!(d.schedule||[]).length
+                                ? <span style={{ color: "#bbb", fontSize: 12 }}>정보 없음</span>
+                                : (d.schedule||[]).map((sc, j) => (
+                                  <span key={j} style={sc.period === "PM" ? s.pillPM : s.pillAM}>
+                                    {sc.day} {sc.period === "PM" ? "오후" : "오전"}
+                                  </span>
+                                ))}
+                            </td>
+                            <td style={{ ...s.td, fontFamily: "monospace", fontSize: 12 }}>{d.room||"-"}</td>
+                            <td style={{ ...s.td, fontSize: 12, color: "#666" }}>{d.notes||"-"}</td>
+                          </tr>
+                        ))
+                      }
                     </tbody>
                   </table>
                 </div>
               )}
 
-              {/* 요일별 뷰 */}
               {viewMode === "day" && (
                 <DayView doctors={doctors} search={search} deptFilter={deptFilter} />
               )}
 
-              {/* 분석 로그 */}
               <div style={{ padding: "12px 16px", borderTop: "0.5px solid #eee" }}>
                 <button style={{ fontSize: 12, color: "#aaa", cursor: "pointer", background: "none", border: "none", display: "flex", alignItems: "center", gap: 6, padding: 0 }}
                   onClick={() => setShowRaw(r => !r)}>
