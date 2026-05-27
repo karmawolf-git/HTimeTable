@@ -1,14 +1,31 @@
 import { useState, useRef, useCallback } from "react";
 
-/* ── 환경별 API URL / KEY ────────────────────────────── */
-// 개발: Vite 프록시 사용 (CORS 회피)
-// 프록덕션: Anthropic 직접 호출
-const API_URL = import.meta.env.PROD
-  ? "https://api.anthropic.com/v1/messages"
-  : "/api/anthropic/v1/messages";
+/* ── Gemini API ───────────────────────────────────────── */
+const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_URL = (key) =>
+  `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
 
 // 빌드 시 주입된 API 키 (없으면 빈 문자열)
-const BUNDLED_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY || "";
+const BUNDLED_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
+
+async function callAPI(base64, mediaType, prompt, apiKey) {
+  const res = await fetch(GEMINI_URL(apiKey), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{
+        parts: [
+          { inline_data: { mime_type: mediaType, data: base64 } },
+          { text: prompt },
+        ],
+      }],
+      generationConfig: { maxOutputTokens: 1500 },
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error?.message || `API 오류 (HTTP ${res.status})`);
+  return (data.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("").trim();
+}
 
 /* ── 유틸 ────────────────────────────────────────────── */
 function getMediaType(file) {
@@ -18,29 +35,6 @@ function getMediaType(file) {
   if (/\.png$/i.test(file.name)) return "image/png";
   if (/\.webp$/i.test(file.name)) return "image/webp";
   return "image/jpeg";
-}
-
-async function callAPI(base64, mediaType, prompt, apiKey) {
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      messages: [{ role: "user", content: [
-        { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-        { type: "text", text: prompt },
-      ]}],
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error?.message || `API 오류 (HTTP ${res.status})`);
-  return (data.content || []).map(b => b.text || "").join("").trim();
 }
 
 const PROMPT_DEPTS = `이 이미지는 병원 외래 스케줄 표입니다.
@@ -101,72 +95,47 @@ function DayView({ doctors, search, deptFilter }) {
     return (!q || (d.name||"").toLowerCase().includes(q) || (d.department||"").toLowerCase().includes(q))
       && (!deptFilter || d.department === deptFilter);
   });
-
   const matrix = {};
   DAYS.forEach(day => { matrix[`${day}_AM`] = []; matrix[`${day}_PM`] = []; });
   filtered.forEach(doc => {
     (doc.schedule || []).forEach(sc => {
       const key = `${sc.day}_${sc.period}`;
-      if (matrix[key] && !matrix[key].find(x => x.name === doc.name && x.department === doc.department)) {
+      if (matrix[key] && !matrix[key].find(x => x.name === doc.name && x.department === doc.department))
         matrix[key].push(doc);
-      }
     });
   });
-
   const hasAny = DAYS.some(d => matrix[`${d}_AM`].length || matrix[`${d}_PM`].length);
-  if (!hasAny) return (
-    <div style={{ padding: "2rem", textAlign: "center", color: "#bbb", fontSize: 13 }}>표시할 일정이 없습니다</div>
-  );
-
+  if (!hasAny) return <div style={{ padding: "2rem", textAlign: "center", color: "#bbb", fontSize: 13 }}>표시할 일정이 없습니다</div>;
   return (
     <div style={{ overflowX: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 680 }}>
-        <colgroup>
-          <col style={{ width: 52 }} />
-          {DAYS.map(d => <col key={d} />)}
-        </colgroup>
+        <colgroup><col style={{ width: 52 }} />{DAYS.map(d => <col key={d} />)}</colgroup>
         <thead>
           <tr>
             <th style={{ padding: "8px 6px", background: "#f9f9f9", borderBottom: "0.5px solid #ddd", fontSize: 11, color: "#bbb" }} />
             {DAYS.map(day => (
-              <th key={day} style={{
-                padding: "9px 8px", background: "#f9f9f9",
-                borderBottom: "0.5px solid #ddd", borderLeft: "0.5px solid #f0f0f0",
-                fontSize: 12, fontWeight: 600, color: "#444", textAlign: "center",
-              }}>{day}요일</th>
+              <th key={day} style={{ padding: "9px 8px", background: "#f9f9f9", borderBottom: "0.5px solid #ddd", borderLeft: "0.5px solid #f0f0f0", fontSize: 12, fontWeight: 600, color: "#444", textAlign: "center" }}>
+                {day}요일
+              </th>
             ))}
           </tr>
         </thead>
         <tbody>
           {["AM", "PM"].map(period => (
             <tr key={period} style={{ verticalAlign: "top" }}>
-              <td style={{
-                padding: "10px 4px", textAlign: "center", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",
-                borderBottom: "0.5px solid #eee", borderRight: "0.5px solid #ddd",
-                color: period === "AM" ? "#085041" : "#633806",
-                background: period === "AM" ? "#f0faf5" : "#fef9f0",
-              }}>{period === "AM" ? "오전" : "오후"}</td>
+              <td style={{ padding: "10px 4px", textAlign: "center", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", borderBottom: "0.5px solid #eee", borderRight: "0.5px solid #ddd", color: period === "AM" ? "#085041" : "#633806", background: period === "AM" ? "#f0faf5" : "#fef9f0" }}>
+                {period === "AM" ? "오전" : "오후"}
+              </td>
               {DAYS.map(day => {
                 const list = matrix[`${day}_${period}`];
                 return (
-                  <td key={day} style={{
-                    padding: "6px 8px", verticalAlign: "top",
-                    borderBottom: "0.5px solid #f0f0f0", borderLeft: "0.5px solid #f0f0f0",
-                    background: list.length ? (period === "AM" ? "#fafffe" : "#fffdf8") : "transparent",
-                    minWidth: 90,
-                  }}>
+                  <td key={day} style={{ padding: "6px 8px", verticalAlign: "top", borderBottom: "0.5px solid #f0f0f0", borderLeft: "0.5px solid #f0f0f0", background: list.length ? (period === "AM" ? "#fafffe" : "#fffdf8") : "transparent", minWidth: 90 }}>
                     {list.length === 0
                       ? <span style={{ color: "#e0e0e0", fontSize: 12, display: "block", textAlign: "center", paddingTop: 6 }}>—</span>
                       : list.map((d, i) => (
-                        <div key={i} style={{
-                          marginBottom: 4, padding: "4px 6px", borderRadius: 6,
-                          background: period === "AM" ? "#E1F5EE" : "#FAEEDA",
-                          border: `0.5px solid ${period === "AM" ? "#9FE1CB" : "#FAC775"}`,
-                        }}>
+                        <div key={i} style={{ marginBottom: 4, padding: "4px 6px", borderRadius: 6, background: period === "AM" ? "#E1F5EE" : "#FAEEDA", border: `0.5px solid ${period === "AM" ? "#9FE1CB" : "#FAC775"}` }}>
                           <div style={{ fontSize: 12, fontWeight: 600, color: "#111", lineHeight: 1.3 }}>{d.name}</div>
-                          <div style={{ fontSize: 10, color: "#888", marginTop: 1 }}>
-                            {d.department}{d.room ? ` · ${d.room}호` : ""}
-                          </div>
+                          <div style={{ fontSize: 10, color: "#888", marginTop: 1 }}>{d.department}{d.room ? ` · ${d.room}호` : ""}</div>
                         </div>
                       ))}
                   </td>
@@ -182,14 +151,12 @@ function DayView({ doctors, search, deptFilter }) {
 
 /* ── App ──────────────────────────────────────────────── */
 export default function App() {
-  // BUNDLED_API_KEY 있으면 자동 사용, 없으면 localStorage 또는 입력
   const [apiKey, setApiKey] = useState(() =>
-    BUNDLED_API_KEY || localStorage.getItem("anthropic_api_key") || ""
+    BUNDLED_API_KEY || localStorage.getItem("gemini_api_key") || ""
   );
   const [apiKeyInput, setApiKeyInput] = useState("");
-  // 번들링된 키가 있으면 입력 화면 스킵
   const [showApiKeySetup, setShowApiKeySetup] = useState(
-    !BUNDLED_API_KEY && !localStorage.getItem("anthropic_api_key")
+    !BUNDLED_API_KEY && !localStorage.getItem("gemini_api_key")
   );
 
   const [images, setImages] = useState([]);
@@ -212,8 +179,8 @@ export default function App() {
 
   const saveApiKey = () => {
     const key = apiKeyInput.trim();
-    if (!key.startsWith("sk-ant-")) { alert("올바른 Anthropic API 키를 입력하세요 (sk-ant- 로 시작)"); return; }
-    localStorage.setItem("anthropic_api_key", key);
+    if (!key.startsWith("AIza")) { alert("올바른 Gemini API 키를 입력하세요 (AIza로 시작)"); return; }
+    localStorage.setItem("gemini_api_key", key);
     setApiKey(key); setShowApiKeySetup(false); setApiKeyInput("");
   };
 
@@ -223,13 +190,7 @@ export default function App() {
       const reader = new FileReader();
       reader.onload = (e) => {
         idRef.current += 1;
-        const img = {
-          id: idRef.current, src: e.target.result,
-          base64: e.target.result.split(",")[1],
-          mediaType: mt, fileName: file.name,
-          fileSize: (file.size / 1024).toFixed(1) + " KB",
-        };
-        setImages(prev => [...prev, img]);
+        setImages(prev => [...prev, { id: idRef.current, src: e.target.result, base64: e.target.result.split(",")[1], mediaType: mt, fileName: file.name, fileSize: (file.size / 1024).toFixed(1) + " KB" }]);
         setStage(s => s === "upload" ? "preview" : s);
       };
       reader.readAsDataURL(file);
@@ -237,11 +198,7 @@ export default function App() {
   }, []);
 
   const removeImage = (id) => {
-    setImages(prev => {
-      const next = prev.filter(i => i.id !== id);
-      if (!next.length) setStage("upload");
-      return next;
-    });
+    setImages(prev => { const next = prev.filter(i => i.id !== id); if (!next.length) setStage("upload"); return next; });
   };
 
   const reset = () => {
@@ -335,7 +292,6 @@ export default function App() {
 
   return (
     <div style={s.wrap}>
-      {/* 헤더 */}
       <div style={s.header}>
         <div style={s.iconBox}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#E1F5EE" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -347,22 +303,23 @@ export default function App() {
           <div style={{ fontSize: 16, fontWeight: 500 }}>병원 스케줄 분석 에이전트</div>
           <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>외래 스케줄 사진 → 전체 의사 자동 추출 · MR 전용</div>
         </div>
-        {/* 번들링 키가 없을 때만 API키 변경 버튼 표시 */}
         {!BUNDLED_API_KEY && apiKey && (
           <button style={{ ...s.btnSm, fontSize: 11, color: "#aaa" }}
-            onClick={() => { localStorage.removeItem("anthropic_api_key"); setApiKey(""); setShowApiKeySetup(true); }}>
+            onClick={() => { localStorage.removeItem("gemini_api_key"); setApiKey(""); setShowApiKeySetup(true); }}>
             🔑 API키 변경
           </button>
         )}
       </div>
 
-      {/* API 키 입력 (BUNDLED_API_KEY가 없을 때만 표시) */}
       {showApiKeySetup && (
         <div style={s.apiKeyBox}>
-          <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>🔑 Anthropic API 키 설정</div>
-          <div style={{ fontSize: 12, color: "#888", marginBottom: 12 }}>Claude AI를 사용하기 위한 API 키가 필요합니다. 키는 브라우저 localStorage에만 저장됩니다.</div>
+          <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>🔑 Google Gemini API 키 설정</div>
+          <div style={{ fontSize: 12, color: "#888", marginBottom: 4 }}>Gemini API는 <strong>무료</strong>로 사용 가능합니다.</div>
+          <div style={{ fontSize: 12, color: "#0F6E56", marginBottom: 12 }}>
+            키 발급: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color: "#0F6E56" }}>aistudio.google.com/apikey</a> → “Get API key” (Google 로그인만 필요, 신용카드 불필요)
+          </div>
           <div style={{ display: "flex", gap: 8 }}>
-            <input style={s.apiKeyInput} type="password" placeholder="sk-ant-api..." value={apiKeyInput}
+            <input style={s.apiKeyInput} type="password" placeholder="AIzaSy..." value={apiKeyInput}
               onChange={e => setApiKeyInput(e.target.value)} onKeyDown={e => e.key === "Enter" && saveApiKey()} />
             <button style={s.btnPrimary} onClick={saveApiKey}>저장</button>
           </div>
@@ -373,46 +330,26 @@ export default function App() {
         <>
           {(stage === "upload" || stage === "preview") && (
             <div>
-              <div style={s.dropZone}
-                onClick={() => fileRef.current?.click()}
+              <div style={s.dropZone} onClick={() => fileRef.current?.click()}
                 onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
                 onDragLeave={() => setIsDragging(false)}
                 onDrop={e => { e.preventDefault(); setIsDragging(false); addFiles(e.dataTransfer.files); }}>
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={isDragging ? "#0F6E56" : "#bbb"}
-                  strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-                  style={{ margin: "0 auto 8px", display: "block" }}>
-                  <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
-                  <circle cx="12" cy="13" r="3"/>
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={isDragging ? "#0F6E56" : "#bbb"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: "0 auto 8px", display: "block" }}>
+                  <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>
                 </svg>
-                <div style={{ fontSize: 13, color: "#666" }}>
-                  <strong style={{ color: "#0F6E56" }}>클릭하거나 끌어다 놓아</strong> 사진 추가
-                </div>
+                <div style={{ fontSize: 13, color: "#666" }}><strong style={{ color: "#0F6E56" }}>클릭하거나 끌어다 놓아</strong> 사진 추가</div>
                 <div style={{ fontSize: 11, color: "#bbb", marginTop: 4 }}>여러 장 동시 선택 가능 · JPG / PNG / WEBP</div>
-                <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: "none" }}
-                  onChange={e => addFiles(e.target.files)} />
+                <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={e => addFiles(e.target.files)} />
               </div>
               {images.length > 0 && (
                 <div style={{ marginTop: 14 }}>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
                     {images.map((img, idx) => (
                       <div key={img.id} style={{ position: "relative", width: 86, flexShrink: 0 }}>
-                        <img src={img.src} alt={img.fileName} style={{
-                          width: "100%", aspectRatio: "3/4", objectFit: "cover",
-                          borderRadius: 8, border: "0.5px solid #ddd", display: "block",
-                        }} />
-                        <div style={{
-                          position: "absolute", top: 4, left: 5, fontSize: 10, fontWeight: 700,
-                          color: "#fff", background: "rgba(0,0,0,0.45)", borderRadius: 4, padding: "1px 5px",
-                        }}>{idx + 1}</div>
-                        <button onClick={() => removeImage(img.id)} style={{
-                          position: "absolute", top: 4, right: 4, width: 18, height: 18,
-                          borderRadius: "50%", background: "rgba(0,0,0,0.5)", border: "none",
-                          color: "#fff", fontSize: 10, cursor: "pointer", display: "flex",
-                          alignItems: "center", justifyContent: "center", padding: 0, lineHeight: 1,
-                        }}>✕</button>
-                        <div style={{ fontSize: 10, color: "#aaa", textAlign: "center", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {img.fileSize}
-                        </div>
+                        <img src={img.src} alt={img.fileName} style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", borderRadius: 8, border: "0.5px solid #ddd", display: "block" }} />
+                        <div style={{ position: "absolute", top: 4, left: 5, fontSize: 10, fontWeight: 700, color: "#fff", background: "rgba(0,0,0,0.45)", borderRadius: 4, padding: "1px 5px" }}>{idx + 1}</div>
+                        <button onClick={() => removeImage(img.id)} style={{ position: "absolute", top: 4, right: 4, width: 18, height: 18, borderRadius: "50%", background: "rgba(0,0,0,0.5)", border: "none", color: "#fff", fontSize: 10, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>✕</button>
+                        <div style={{ fontSize: 10, color: "#aaa", textAlign: "center", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{img.fileSize}</div>
                       </div>
                     ))}
                   </div>
@@ -431,18 +368,11 @@ export default function App() {
               <div style={{ width: 28, height: 28, borderRadius: "50%", border: "2.5px solid #eee", borderTopColor: "#0F6E56", animation: "spin 0.8s linear infinite" }} />
               <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
               <div style={{ textAlign: "center" }}>
-                <div style={{ fontSize: 12, color: "#aaa", marginBottom: 4 }}>
-                  이미지 {progress.imgCurrent} / {progress.imgTotal}
-                  <span style={{ marginLeft: 6, fontSize: 11 }}>{progress.imgLabel}</span>
-                </div>
+                <div style={{ fontSize: 12, color: "#aaa", marginBottom: 4 }}>이미지 {progress.imgCurrent} / {progress.imgTotal} <span style={{ fontSize: 11 }}>{progress.imgLabel}</span></div>
                 <div style={{ fontSize: 14, fontWeight: 500 }}>{progress.deptLabel}</div>
-                {progress.deptTotal > 0 && (
-                  <div style={{ fontSize: 12, color: "#bbb", marginTop: 4 }}>진료과 {progress.deptCurrent} / {progress.deptTotal}</div>
-                )}
+                {progress.deptTotal > 0 && <div style={{ fontSize: 12, color: "#bbb", marginTop: 4 }}>진료과 {progress.deptCurrent} / {progress.deptTotal}</div>}
               </div>
-              <div style={s.progressBar}>
-                <div style={{ height: "100%", width: overallPct + "%", background: "#0F6E56", borderRadius: 99, transition: "width 0.4s ease" }} />
-              </div>
+              <div style={s.progressBar}><div style={{ height: "100%", width: overallPct + "%", background: "#0F6E56", borderRadius: 99, transition: "width 0.4s ease" }} /></div>
               <div style={{ fontSize: 12, color: "#bbb" }}>전체 진행률 {overallPct}%</div>
             </div>
           )}
@@ -453,10 +383,7 @@ export default function App() {
                 <div style={{ display: "flex", gap: 8, marginBottom: rawLogs.length ? 12 : 0 }}>
                   <span>⚠</span><div><strong>분석 오류</strong><br />{errorMsg}</div>
                 </div>
-                {rawLogs.length > 0 && (
-                  <><div style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}>진행 로그:</div>
-                  <div style={{ ...s.rawBox, background: "#fff5f5", color: "#791F1F", border: "0.5px solid #F7C1C1" }}>{rawLogs.join("\n\n---\n\n")}</div></>
-                )}
+                {rawLogs.length > 0 && (<><div style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}>진행 로그:</div><div style={{ ...s.rawBox, background: "#fff5f5", color: "#791F1F", border: "0.5px solid #F7C1C1" }}>{rawLogs.join("\n\n---\n\n")}</div></>)}
               </div>
               <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
                 <button style={s.btnGhost} onClick={() => setStage("preview")}>← 다시 시도</button>
@@ -481,13 +408,7 @@ export default function App() {
               <div style={{ display: "flex", gap: 8, padding: "10px 16px", borderBottom: "0.5px solid #eee", flexWrap: "wrap", alignItems: "center" }}>
                 <div style={{ display: "flex", background: "#f4f4f4", borderRadius: 8, padding: 2, flexShrink: 0 }}>
                   {[["table", "☰ 목록"], ["day", "📅 요일별"]].map(([mode, label]) => (
-                    <button key={mode} onClick={() => setViewMode(mode)} style={{
-                      padding: "5px 12px", borderRadius: 6, border: "none", cursor: "pointer",
-                      fontSize: 12, fontWeight: 500, transition: "all 0.15s",
-                      background: viewMode === mode ? "#fff" : "transparent",
-                      color: viewMode === mode ? "#111" : "#888",
-                      boxShadow: viewMode === mode ? "0 0 0 0.5px #ddd" : "none",
-                    }}>{label}</button>
+                    <button key={mode} onClick={() => setViewMode(mode)} style={{ padding: "5px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500, transition: "all 0.15s", background: viewMode === mode ? "#fff" : "transparent", color: viewMode === mode ? "#111" : "#888", boxShadow: viewMode === mode ? "0 0 0 0.5px #ddd" : "none" }}>{label}</button>
                   ))}
                 </div>
                 <input style={s.filterInput} placeholder="의사명 또는 진료과 검색..." value={search} onChange={e => setSearch(e.target.value)} />
@@ -505,13 +426,8 @@ export default function App() {
               {viewMode === "table" && (
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-                    <colgroup>
-                      <col style={{ width: 100 }}/><col style={{ width: 110 }}/><col style={{ width: 200 }}/>
-                      <col style={{ width: 70 }}/><col />
-                    </colgroup>
-                    <thead>
-                      <tr>{["의사명","진료과","외래 일정","진료실","비고"].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
-                    </thead>
+                    <colgroup><col style={{ width: 100 }}/><col style={{ width: 110 }}/><col style={{ width: 200 }}/><col style={{ width: 70 }}/><col /></colgroup>
+                    <thead><tr>{["의사명","진료과","외래 일정","진료실","비고"].map(h => <th key={h} style={s.th}>{h}</th>)}</tr></thead>
                     <tbody>
                       {filtered.length === 0
                         ? <tr><td colSpan={5} style={{ ...s.td, textAlign: "center", color: "#bbb", padding: "2rem" }}>검색 결과가 없습니다</td></tr>
@@ -519,15 +435,7 @@ export default function App() {
                           <tr key={i}>
                             <td style={s.td}><span style={{ fontWeight: 500 }}>{d.name||"-"}</span></td>
                             <td style={s.td}><span style={s.deptBadge}>{d.department||"-"}</span></td>
-                            <td style={s.td}>
-                              {!(d.schedule||[]).length
-                                ? <span style={{ color: "#bbb", fontSize: 12 }}>정보 없음</span>
-                                : (d.schedule||[]).map((sc, j) => (
-                                  <span key={j} style={sc.period === "PM" ? s.pillPM : s.pillAM}>
-                                    {sc.day} {sc.period === "PM" ? "오후" : "오전"}
-                                  </span>
-                                ))}
-                            </td>
+                            <td style={s.td}>{!(d.schedule||[]).length ? <span style={{ color: "#bbb", fontSize: 12 }}>정보 없음</span> : (d.schedule||[]).map((sc, j) => <span key={j} style={sc.period === "PM" ? s.pillPM : s.pillAM}>{sc.day} {sc.period === "PM" ? "오후" : "오전"}</span>)}</td>
                             <td style={{ ...s.td, fontFamily: "monospace", fontSize: 12 }}>{d.room||"-"}</td>
                             <td style={{ ...s.td, fontSize: 12, color: "#666" }}>{d.notes||"-"}</td>
                           </tr>
@@ -537,12 +445,9 @@ export default function App() {
                   </table>
                 </div>
               )}
-              {viewMode === "day" && (
-                <DayView doctors={doctors} search={search} deptFilter={deptFilter} />
-              )}
+              {viewMode === "day" && <DayView doctors={doctors} search={search} deptFilter={deptFilter} />}
               <div style={{ padding: "12px 16px", borderTop: "0.5px solid #eee" }}>
-                <button style={{ fontSize: 12, color: "#aaa", cursor: "pointer", background: "none", border: "none", display: "flex", alignItems: "center", gap: 6, padding: 0 }}
-                  onClick={() => setShowRaw(r => !r)}>
+                <button style={{ fontSize: 12, color: "#aaa", cursor: "pointer", background: "none", border: "none", display: "flex", alignItems: "center", gap: 6, padding: 0 }} onClick={() => setShowRaw(r => !r)}>
                   {"</>"} {showRaw ? "분석 로그 숨기기" : `분석 로그 보기 (${rawLogs.length}개 항목)`}
                 </button>
                 {showRaw && <div style={s.rawBox}>{rawLogs.join("\n\n---\n\n")}</div>}
