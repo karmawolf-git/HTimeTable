@@ -1,6 +1,6 @@
 # 병원 스케줄 분석 에이전트 (Mr Schedule Agent)
 
-병원 외래 스케줄 사진을 업로드하면 Claude AI가 모든 의사의 진료 일정을 자동으로 추출합니다. MR(Medical Representative) 업무 지원 전용 도구입니다.
+병원 외래 스케줄 사진을 업로드하면 AI가 모든 의사의 진료 일정을 자동으로 추출합니다. MR(Medical Representative) 업무 지원 전용 도구입니다.
 
 🌐 **배포 주소**: https://karmawolf-git.github.io/HTimeTable/
 
@@ -29,9 +29,14 @@ npm run dev
 
 ### 3. API 키 설정
 
-브라우저에서 앱을 열면 Anthropic API 키 입력창이 나타납니다.  
-[Anthropic Console](https://console.anthropic.com/)에서 발급한 `sk-ant-api...` 키를 입력하세요.  
-키는 브라우저 `localStorage`에만 저장되며 외부로 전송되지 않습니다.
+배포된 앱은 **Google Gemini API 키**가 빌드 시 자동으로 포함됩니다.  
+로컬 개발 시에는 `.env` 파일에 아래와 같이 설정하세요:
+
+```
+VITE_GEMINI_API_KEY=AIzaSy...
+```
+
+[Google AI Studio](https://aistudio.google.com/app/apikey)에서 무료로 발급받을 수 있습니다.
 
 ### 4. 빌드
 
@@ -50,7 +55,7 @@ npm run build
 ## 기술 스택
 
 - **React 18** + **Vite 5**
-- **Claude claude-sonnet-4-20250514** (Vision API)
+- **Google Gemini 2.0 Flash** (Vision API, 무료 티어)
 - 스타일: 인라인 CSS (외부 의존성 없음)
 - 배포: GitHub Pages (GitHub Actions)
 
