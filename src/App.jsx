@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 
 /* ── Gemini API ───────────────────────────────────────── */
-const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_MODEL = "gemini-2.5-flash";
 const GEMINI_URL = (key) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
 
@@ -316,7 +316,7 @@ export default function App() {
           <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>🔑 Google Gemini API 키 설정</div>
           <div style={{ fontSize: 12, color: "#888", marginBottom: 4 }}>Gemini API는 <strong>무료</strong>로 사용 가능합니다.</div>
           <div style={{ fontSize: 12, color: "#0F6E56", marginBottom: 12 }}>
-            키 발급: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color: "#0F6E56" }}>aistudio.google.com/apikey</a> → “Get API key” (Google 로그인만 필요, 신용카드 불필요)
+            키 발급: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color: "#0F6E56" }}>aistudio.google.com/apikey</a> → "Get API key" (Google 로그인만 필요, 신용카드 불필요)
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <input style={s.apiKeyInput} type="password" placeholder="AIzaSy..." value={apiKeyInput}
