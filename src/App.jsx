@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 
 /* ── Gemini API ───────────────────────────────────────── */
 const GEMINI_MODEL = "gemini-2.5-flash";
@@ -12,12 +12,10 @@ async function callAPI(base64, mediaType, prompt, apiKey, maxTokens = 2000) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      contents: [{
-        parts: [
-          { inline_data: { mime_type: mediaType, data: base64 } },
-          { text: prompt },
-        ],
-      }],
+      contents: [{ parts: [
+        { inline_data: { mime_type: mediaType, data: base64 } },
+        { text: prompt },
+      ]}],
       generationConfig: { maxOutputTokens: maxTokens },
     }),
   });
@@ -90,17 +88,51 @@ function parseDeptDoctors(text, department) {
     }).filter(Boolean);
 }
 
-/* ── 요일별 그리드 ──────────────────────────────── */
-const DAYS = ["월", "화", "수", "목", "금", "토"];
+/* ── 진료과 드롭다운 ─────────────────────────────── */
+function DeptDropdown({ allDepts, selected, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef();
+  useEffect(() => {
+    const fn = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", fn);
+    return () => document.removeEventListener("mousedown", fn);
+  }, []);
+  const toggle = (d) => onChange(selected.includes(d) ? selected.filter(x => x !== d) : [...selected, d]);
+  const label = selected.length === 0 ? "전체 진료과" : `진료과 ${selected.length}개선택`;
+  return (
+    <div ref={ref} style={{ position: "relative", flexShrink: 0 }}>
+      <button onClick={() => setOpen(o => !o)} style={{ padding: "6px 10px", fontSize: 13, border: "0.5px solid #ddd", borderRadius: 8, background: selected.length ? "#E1F5EE" : "#f9f9f9", color: selected.length ? "#085041" : "#222", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+        {label} <span style={{ fontSize: 10 }}>{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, background: "#fff", border: "0.5px solid #ddd", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.1)", zIndex: 200, minWidth: 160, maxHeight: 260, overflowY: "auto", padding: "4px 0" }}>
+          {selected.length > 0 && (
+            <button onClick={() => onChange([])} style={{ width: "100%", textAlign: "left", padding: "7px 12px", fontSize: 12, color: "#0F6E56", background: "none", border: "none", borderBottom: "0.5px solid #f0f0f0", cursor: "pointer", fontWeight: 500 }}>✕ 선택 해제</button>
+          )}
+          {allDepts.map(d => (
+            <label key={d} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", cursor: "pointer", fontSize: 13, color: selected.includes(d) ? "#085041" : "#333", background: selected.includes(d) ? "#f0faf5" : "transparent" }}>
+              <input type="checkbox" checked={selected.includes(d)} onChange={() => toggle(d)} style={{ accentColor: "#0F6E56", flexShrink: 0 }} />
+              {d}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
-function DayView({ doctors, search, deptFilter }) {
+/* ── 요일별 그리드 ──────────────────────────────── */
+const ALL_DAYS = ["월", "화", "수", "목", "금", "토"];
+
+function DayView({ doctors, search, deptFilters, dayFilters }) {
+  const activeDays = dayFilters.length > 0 ? ALL_DAYS.filter(d => dayFilters.includes(d)) : ALL_DAYS;
   const filtered = doctors.filter(d => {
     const q = search.toLowerCase();
     return (!q || (d.name||"").toLowerCase().includes(q) || (d.department||"").toLowerCase().includes(q))
-      && (!deptFilter || d.department === deptFilter);
+      && (deptFilters.length === 0 || deptFilters.includes(d.department));
   });
   const matrix = {};
-  DAYS.forEach(day => { matrix[`${day}_AM`] = []; matrix[`${day}_PM`] = []; });
+  activeDays.forEach(day => { matrix[`${day}_AM`] = []; matrix[`${day}_PM`] = []; });
   filtered.forEach(doc => {
     (doc.schedule || []).forEach(sc => {
       const key = `${sc.day}_${sc.period}`;
@@ -108,16 +140,16 @@ function DayView({ doctors, search, deptFilter }) {
         matrix[key].push(doc);
     });
   });
-  const hasAny = DAYS.some(d => matrix[`${d}_AM`].length || matrix[`${d}_PM`].length);
+  const hasAny = activeDays.some(d => matrix[`${d}_AM`].length || matrix[`${d}_PM`].length);
   if (!hasAny) return <div style={{ padding: "2rem", textAlign: "center", color: "#bbb", fontSize: 13 }}>표시할 일정이 없습니다</div>;
   return (
     <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 680 }}>
-        <colgroup><col style={{ width: 52 }} />{DAYS.map(d => <col key={d} />)}</colgroup>
+      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: activeDays.length * 110 }}>
+        <colgroup><col style={{ width: 52 }} />{activeDays.map(d => <col key={d} />)}</colgroup>
         <thead>
           <tr>
             <th style={{ padding: "8px 6px", background: "#f9f9f9", borderBottom: "0.5px solid #ddd", fontSize: 11, color: "#bbb" }} />
-            {DAYS.map(day => (
+            {activeDays.map(day => (
               <th key={day} style={{ padding: "9px 8px", background: "#f9f9f9", borderBottom: "0.5px solid #ddd", borderLeft: "0.5px solid #f0f0f0", fontSize: 12, fontWeight: 600, color: "#444", textAlign: "center" }}>
                 {day}요일
               </th>
@@ -130,7 +162,7 @@ function DayView({ doctors, search, deptFilter }) {
               <td style={{ padding: "10px 4px", textAlign: "center", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", borderBottom: "0.5px solid #eee", borderRight: "0.5px solid #ddd", color: period === "AM" ? "#085041" : "#633806", background: period === "AM" ? "#f0faf5" : "#fef9f0" }}>
                 {period === "AM" ? "오전" : "오후"}
               </td>
-              {DAYS.map(day => {
+              {activeDays.map(day => {
                 const list = matrix[`${day}_${period}`];
                 return (
                   <td key={day} style={{ padding: "6px 8px", verticalAlign: "top", borderBottom: "0.5px solid #f0f0f0", borderLeft: "0.5px solid #f0f0f0", background: list.length ? (period === "AM" ? "#fafffe" : "#fffdf8") : "transparent", minWidth: 90 }}>
@@ -155,13 +187,9 @@ function DayView({ doctors, search, deptFilter }) {
 
 /* ── App ──────────────────────────────────────────────── */
 export default function App() {
-  const [apiKey, setApiKey] = useState(() =>
-    BUNDLED_API_KEY || localStorage.getItem("gemini_api_key") || ""
-  );
+  const [apiKey, setApiKey] = useState(() => BUNDLED_API_KEY || localStorage.getItem("gemini_api_key") || "");
   const [apiKeyInput, setApiKeyInput] = useState("");
-  const [showApiKeySetup, setShowApiKeySetup] = useState(
-    !BUNDLED_API_KEY && !localStorage.getItem("gemini_api_key")
-  );
+  const [showApiKeySetup, setShowApiKeySetup] = useState(!BUNDLED_API_KEY && !localStorage.getItem("gemini_api_key"));
 
   const [images, setImages] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -177,8 +205,8 @@ export default function App() {
 
   const [viewMode, setViewMode] = useState("table");
   const [search, setSearch] = useState("");
-  const [deptFilter, setDeptFilter] = useState("");
-  const [dayFilter, setDayFilter] = useState("");
+  const [deptFilters, setDeptFilters] = useState([]);
+  const [dayFilters, setDayFilters] = useState([]);
   const [copied, setCopied] = useState(false);
 
   const saveApiKey = () => {
@@ -207,7 +235,7 @@ export default function App() {
 
   const reset = () => {
     setStage("upload"); setImages([]); setDoctors([]);
-    setSearch(""); setDeptFilter(""); setDayFilter("");
+    setSearch(""); setDeptFilters([]); setDayFilters([]);
     setShowRaw(false); setErrorMsg(""); setRawLogs([]);
     setViewMode("table");
     if (fileRef.current) fileRef.current.value = "";
@@ -220,7 +248,6 @@ export default function App() {
       for (let imgIdx = 0; imgIdx < images.length; imgIdx++) {
         const img = images[imgIdx];
         setProgress({ imgLabel: img.fileName, imgCurrent: imgIdx + 1, imgTotal: images.length, deptLabel: "진료과 목록 파악 중...", deptCurrent: 0, deptTotal: 0 });
-        // 진료과 목록: 토큰 한도 4096으로 늘려 많은 진료과도 잡힘 없이 전체 출력
         const deptsRaw = await callAPI(img.base64, img.mediaType, PROMPT_DEPTS, apiKey, 4096);
         setRawLogs(l => [...l, `[이미지 ${imgIdx + 1}: ${img.fileName}]\n[진료과 목록]\n${deptsRaw}`]);
         const depts = deptsRaw.split("\n").map(l => l.trim()).filter(l => l && l.length > 1 && !l.includes("|"));
@@ -252,8 +279,8 @@ export default function App() {
   const filtered = doctors.filter(d => {
     const q = search.toLowerCase();
     return (!q || (d.name||"").toLowerCase().includes(q) || (d.department||"").toLowerCase().includes(q))
-      && (!deptFilter || d.department === deptFilter)
-      && (!dayFilter || (d.schedule||[]).some(s => s.day === dayFilter));
+      && (deptFilters.length === 0 || deptFilters.includes(d.department))
+      && (dayFilters.length === 0 || (d.schedule||[]).some(s => dayFilters.includes(s.day)));
   });
   const allDepts = [...new Set(doctors.map(d => d.department).filter(Boolean))].sort();
 
@@ -265,6 +292,8 @@ export default function App() {
     navigator.clipboard.writeText(["의사명\t진료과\t외래일정\t진료실\t비고", ...rows].join("\n"))
       .then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
   };
+
+  const toggleDay = (day) => setDayFilters(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]);
 
   const overallPct = progress.imgTotal > 0
     ? Math.round(((progress.imgCurrent - 1 + (progress.deptTotal > 0 ? progress.deptCurrent / progress.deptTotal : 0)) / progress.imgTotal) * 100)
@@ -286,7 +315,6 @@ export default function App() {
     deptBadge: { display: "inline-block", padding: "2px 7px", borderRadius: 4, fontSize: 11, background: "#f4f4f4", border: "0.5px solid #ddd", color: "#666" },
     countBadge: { display: "inline-flex", alignItems: "center", padding: "2px 8px", borderRadius: 20, fontSize: 11, fontWeight: 500, background: "#9FE1CB", color: "#085041" },
     filterInput: { flex: 1, minWidth: 140, padding: "6px 10px", fontSize: 13, border: "0.5px solid #ddd", borderRadius: 8, background: "#f9f9f9", color: "#222", outline: "none" },
-    filterSelect: { padding: "6px 10px", fontSize: 13, border: "0.5px solid #ddd", borderRadius: 8, background: "#f9f9f9", color: "#222", outline: "none", cursor: "pointer" },
     errorBox: { padding: "14px 16px", background: "#FCEBEB", border: "0.5px solid #F7C1C1", borderRadius: 12, color: "#791F1F", fontSize: 13 },
     rawBox: { marginTop: 8, padding: 10, background: "#f9f9f9", borderRadius: 8, fontSize: 11, color: "#888", lineHeight: 1.7, whiteSpace: "pre-wrap", maxHeight: 280, overflowY: "auto" },
     progressCard: { background: "#fff", border: "0.5px solid #ddd", borderRadius: 12, padding: "2rem", display: "flex", flexDirection: "column", alignItems: "center", gap: 16 },
@@ -399,6 +427,7 @@ export default function App() {
 
           {stage === "results" && (
             <div style={s.card}>
+              {/* 헤더 */}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "0.5px solid #eee", flexWrap: "wrap", gap: 8 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 500 }}>
                   추출된 외래 일정
@@ -410,24 +439,37 @@ export default function App() {
                   <button style={{ ...s.btnSm, color: "#888" }} onClick={reset}>↺ 새 분석</button>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 8, padding: "10px 16px", borderBottom: "0.5px solid #eee", flexWrap: "wrap", alignItems: "center" }}>
-                <div style={{ display: "flex", background: "#f4f4f4", borderRadius: 8, padding: 2, flexShrink: 0 }}>
-                  {[["table", "☰ 목록"], ["day", "📅 요일별"]].map(([mode, label]) => (
-                    <button key={mode} onClick={() => setViewMode(mode)} style={{ padding: "5px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500, transition: "all 0.15s", background: viewMode === mode ? "#fff" : "transparent", color: viewMode === mode ? "#111" : "#888", boxShadow: viewMode === mode ? "0 0 0 0.5px #ddd" : "none" }}>{label}</button>
-                  ))}
+
+              {/* 탭 + 필터링 */}
+              <div style={{ padding: "10px 16px", borderBottom: "0.5px solid #eee", display: "flex", flexDirection: "column", gap: 8 }}>
+                {/* 1행: 탭 + 검색 + 진료과 */}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <div style={{ display: "flex", background: "#f4f4f4", borderRadius: 8, padding: 2, flexShrink: 0 }}>
+                    {[["table", "☰ 목록"], ["day", "📅 요일별"]].map(([mode, label]) => (
+                      <button key={mode} onClick={() => setViewMode(mode)} style={{ padding: "5px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500, transition: "all 0.15s", background: viewMode === mode ? "#fff" : "transparent", color: viewMode === mode ? "#111" : "#888", boxShadow: viewMode === mode ? "0 0 0 0.5px #ddd" : "none" }}>{label}</button>
+                    ))}
+                  </div>
+                  <input style={s.filterInput} placeholder="의사명 또는 진료과 검색..." value={search} onChange={e => setSearch(e.target.value)} />
+                  <DeptDropdown allDepts={allDepts} selected={deptFilters} onChange={setDeptFilters} />
                 </div>
-                <input style={s.filterInput} placeholder="의사명 또는 진료과 검색..." value={search} onChange={e => setSearch(e.target.value)} />
-                <select style={s.filterSelect} value={deptFilter} onChange={e => setDeptFilter(e.target.value)}>
-                  <option value="">전체 진료과</option>
-                  {allDepts.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-                {viewMode === "table" && (
-                  <select style={s.filterSelect} value={dayFilter} onChange={e => setDayFilter(e.target.value)}>
-                    <option value="">전체 요일</option>
-                    {["월","화","수","목","금","토"].map(d => <option key={d} value={d}>{d}요일</option>)}
-                  </select>
-                )}
+                {/* 2행: 요일 필 */}
+                <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 11, color: "#aaa", marginRight: 2 }}>요일</span>
+                  {ALL_DAYS.map(day => {
+                    const active = dayFilters.includes(day);
+                    return (
+                      <button key={day} onClick={() => toggleDay(day)} style={{ padding: "4px 10px", borderRadius: 6, border: `0.5px solid ${active ? "#0F6E56" : "#ddd"}`, background: active ? "#E1F5EE" : "transparent", color: active ? "#085041" : "#666", fontSize: 12, cursor: "pointer", fontWeight: active ? 600 : 400, transition: "all 0.12s" }}>
+                        {day}
+                      </button>
+                    );
+                  })}
+                  {dayFilters.length > 0 && (
+                    <button onClick={() => setDayFilters([])} style={{ padding: "4px 8px", borderRadius: 6, border: "0.5px solid #ddd", background: "transparent", color: "#aaa", fontSize: 11, cursor: "pointer" }}>✕</button>
+                  )}
+                </div>
               </div>
+
+              {/* 목록 뷰 */}
               {viewMode === "table" && (
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
@@ -440,7 +482,10 @@ export default function App() {
                           <tr key={i}>
                             <td style={s.td}><span style={{ fontWeight: 500 }}>{d.name||"-"}</span></td>
                             <td style={s.td}><span style={s.deptBadge}>{d.department||"-"}</span></td>
-                            <td style={s.td}>{!(d.schedule||[]).length ? <span style={{ color: "#bbb", fontSize: 12 }}>정보 없음</span> : (d.schedule||[]).map((sc, j) => <span key={j} style={sc.period === "PM" ? s.pillPM : s.pillAM}>{sc.day} {sc.period === "PM" ? "오후" : "오전"}</span>)}</td>
+                            <td style={s.td}>{!(d.schedule||[]).length
+                              ? <span style={{ color: "#bbb", fontSize: 12 }}>정보 없음</span>
+                              : (d.schedule||[]).map((sc, j) => <span key={j} style={sc.period === "PM" ? s.pillPM : s.pillAM}>{sc.day} {sc.period === "PM" ? "오후" : "오전"}</span>)
+                            }</td>
                             <td style={{ ...s.td, fontFamily: "monospace", fontSize: 12 }}>{d.room||"-"}</td>
                             <td style={{ ...s.td, fontSize: 12, color: "#666" }}>{d.notes||"-"}</td>
                           </tr>
@@ -450,7 +495,10 @@ export default function App() {
                   </table>
                 </div>
               )}
-              {viewMode === "day" && <DayView doctors={doctors} search={search} deptFilter={deptFilter} />}
+
+              {/* 요일별 뷰 */}
+              {viewMode === "day" && <DayView doctors={doctors} search={search} deptFilters={deptFilters} dayFilters={dayFilters} />}
+
               <div style={{ padding: "12px 16px", borderTop: "0.5px solid #eee" }}>
                 <button style={{ fontSize: 12, color: "#aaa", cursor: "pointer", background: "none", border: "none", display: "flex", alignItems: "center", gap: 6, padding: 0 }} onClick={() => setShowRaw(r => !r)}>
                   {"</>"} {showRaw ? "분석 로그 숨기기" : `분석 로그 보기 (${rawLogs.length}개 항목)`}
