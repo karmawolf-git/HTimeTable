@@ -5,10 +5,9 @@ const GEMINI_MODEL = "gemini-2.5-flash";
 const GEMINI_URL = (key) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
 
-// 빌드 시 주입된 API 키 (없으면 빈 문자열)
 const BUNDLED_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
 
-async function callAPI(base64, mediaType, prompt, apiKey) {
+async function callAPI(base64, mediaType, prompt, apiKey, maxTokens = 2000) {
   const res = await fetch(GEMINI_URL(apiKey), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -19,7 +18,7 @@ async function callAPI(base64, mediaType, prompt, apiKey) {
           { text: prompt },
         ],
       }],
-      generationConfig: { maxOutputTokens: 1500 },
+      generationConfig: { maxOutputTokens: maxTokens },
     }),
   });
   const data = await res.json();
@@ -38,14 +37,19 @@ function getMediaType(file) {
 }
 
 const PROMPT_DEPTS = `이 이미지는 병원 외래 스케줄 표입니다.
-이미지에 있는 모든 진료과 이름을 추출해서, 줄바꿈으로 구분해서 나열하세요.
-진료과 이름만 출력하고 다른 설명은 하지 마세요.
+스케줄 표 전체를 꼼꼼히 살펴서 모든 진료과를 반드시 전부 빠짐없이 추출하세요.
+일부만 나열하지 말고, 이미지에 보이는 모든 진료과를 나열하세요.
+진료과 이름만 줄바꿈으로 구분해서 출력하고, 번호나 다른 설명은 일절 충력하지 마세요.
 
 예시:
 감염내과
 내분비내과
 류마티스내과
-비뇨의학과`;
+비뇨의학과
+심장내과
+호흡기내과
+헤마토로지과
+소화기내과`;
 
 function makeDeptPrompt(dept) {
   return `이 이미지는 병원 외래 스케줄 표입니다.
@@ -216,7 +220,8 @@ export default function App() {
       for (let imgIdx = 0; imgIdx < images.length; imgIdx++) {
         const img = images[imgIdx];
         setProgress({ imgLabel: img.fileName, imgCurrent: imgIdx + 1, imgTotal: images.length, deptLabel: "진료과 목록 파악 중...", deptCurrent: 0, deptTotal: 0 });
-        const deptsRaw = await callAPI(img.base64, img.mediaType, PROMPT_DEPTS, apiKey);
+        // 진료과 목록: 토큰 한도 4096으로 늘려 많은 진료과도 잡힘 없이 전체 출력
+        const deptsRaw = await callAPI(img.base64, img.mediaType, PROMPT_DEPTS, apiKey, 4096);
         setRawLogs(l => [...l, `[이미지 ${imgIdx + 1}: ${img.fileName}]\n[진료과 목록]\n${deptsRaw}`]);
         const depts = deptsRaw.split("\n").map(l => l.trim()).filter(l => l && l.length > 1 && !l.includes("|"));
         if (!depts.length) { setRawLogs(l => [...l, `[이미지 ${imgIdx + 1}] 진료과 없음, 건너뜀`]); continue; }
@@ -224,7 +229,7 @@ export default function App() {
           const dept = depts[di];
           setProgress({ imgLabel: img.fileName, imgCurrent: imgIdx + 1, imgTotal: images.length, deptLabel: `${dept} 의사 추출 중...`, deptCurrent: di + 1, deptTotal: depts.length });
           try {
-            const deptRaw = await callAPI(img.base64, img.mediaType, makeDeptPrompt(dept), apiKey);
+            const deptRaw = await callAPI(img.base64, img.mediaType, makeDeptPrompt(dept), apiKey, 2000);
             setRawLogs(l => [...l, `[이미지 ${imgIdx + 1} / ${dept}]\n${deptRaw}`]);
             allDoctors.push(...parseDeptDoctors(deptRaw, dept));
           } catch (e) {
@@ -316,7 +321,7 @@ export default function App() {
           <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>🔑 Google Gemini API 키 설정</div>
           <div style={{ fontSize: 12, color: "#888", marginBottom: 4 }}>Gemini API는 <strong>무료</strong>로 사용 가능합니다.</div>
           <div style={{ fontSize: 12, color: "#0F6E56", marginBottom: 12 }}>
-            키 발급: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color: "#0F6E56" }}>aistudio.google.com/apikey</a> → "Get API key" (Google 로그인만 필요, 신용카드 불필요)
+            키 발급: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color: "#0F6E56" }}>aistudio.google.com/apikey</a> → "Get API key"
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <input style={s.apiKeyInput} type="password" placeholder="AIzaSy..." value={apiKeyInput}
