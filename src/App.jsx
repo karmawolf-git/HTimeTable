@@ -4,8 +4,8 @@ import { useState, useRef, useCallback, useEffect } from "react";
 const GEMINI_MODEL = "gemini-2.5-flash";
 const GEMINI_URL = (key) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
-
 const BUNDLED_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
+const SAVE_KEY = "schedule_saved_data";
 
 async function callAPI(base64, mediaType, prompt, apiKey, maxTokens = 2000) {
   const res = await fetch(GEMINI_URL(apiKey), {
@@ -37,7 +37,7 @@ function getMediaType(file) {
 const PROMPT_DEPTS = `이 이미지는 병원 외래 스케줄 표입니다.
 스케줄 표 전체를 꼼꼼히 살펴서 모든 진료과를 반드시 전부 빠짐없이 추출하세요.
 일부만 나열하지 말고, 이미지에 보이는 모든 진료과를 나열하세요.
-진료과 이름만 줄바꿈으로 구분해서 출력하고, 번호나 다른 설명은 일절 충력하지 마세요.
+진료과 이름만 줄바꿈으로 구분해서 출력하고, 번호나 다른 설명은 일절 출력하지 마세요.
 
 예시:
 감염내과
@@ -208,6 +208,15 @@ export default function App() {
   const [deptFilters, setDeptFilters] = useState([]);
   const [dayFilters, setDayFilters] = useState([]);
   const [copied, setCopied] = useState(false);
+  const [savedToast, setSavedToast] = useState(false);
+  const [savedInfo, setSavedInfo] = useState(() => {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return null;
+      const d = JSON.parse(raw);
+      return { savedAt: d.savedAt, count: d.count };
+    } catch { return null; }
+  });
 
   const saveApiKey = () => {
     const key = apiKeyInput.trim();
@@ -239,6 +248,50 @@ export default function App() {
     setShowRaw(false); setErrorMsg(""); setRawLogs([]);
     setViewMode("table");
     if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const saveToLocal = () => {
+    const info = { doctors, savedAt: new Date().toISOString(), count: doctors.length };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(info));
+    setSavedInfo({ savedAt: info.savedAt, count: info.count });
+    setSavedToast(true);
+    setTimeout(() => setSavedToast(false), 1500);
+  };
+
+  const loadFromSaved = () => {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      setDoctors(data.doctors);
+      setStage("results");
+    } catch { alert("저장 데이터를 불러오는 데 실패했습니다."); }
+  };
+
+  const deleteSaved = () => {
+    localStorage.removeItem(SAVE_KEY);
+    setSavedInfo(null);
+  };
+
+  const downloadCSV = () => {
+    const rows = [
+      ["의사명", "진료과", "외래일정", "진료실", "비고"],
+      ...doctors.map(d => [
+        d.name || "",
+        d.department || "",
+        (d.schedule||[]).map(s => s.day + (s.period === "PM" ? "오후" : "오전")).join(" "),
+        d.room || "",
+        d.notes || "",
+      ]),
+    ];
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `외래스케줄_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const analyze = async () => {
@@ -374,6 +427,21 @@ export default function App() {
                 <div style={{ fontSize: 11, color: "#bbb", marginTop: 4 }}>여러 장 동시 선택 가능 · JPG / PNG / WEBP</div>
                 <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={e => addFiles(e.target.files)} />
               </div>
+
+              {/* 저장된 결과 불러오기 */}
+              {savedInfo && stage === "upload" && (
+                <div style={{ marginTop: 12, padding: "12px 16px", background: "#f9f9f9", border: "0.5px solid #e0e0e0", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: "#333" }}>💾 저장된 분석 결과</div>
+                    <div style={{ fontSize: 11, color: "#aaa", marginTop: 2 }}>{savedInfo.count}명 · {new Date(savedInfo.savedAt).toLocaleString("ko-KR")}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button style={s.btnGhost} onClick={loadFromSaved}>불러오기</button>
+                    <button style={{ ...s.btnSm, color: "#ccc", fontSize: 11 }} onClick={deleteSaved}>삭제</button>
+                  </div>
+                </div>
+              )}
+
               {images.length > 0 && (
                 <div style={{ marginTop: 14 }}>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
@@ -434,7 +502,9 @@ export default function App() {
                   <span style={s.countBadge}>{viewMode === "table" ? filtered.length : doctors.length}명</span>
                   <span style={{ fontSize: 11, color: "#aaa", fontWeight: 400 }}>{allDepts.length}개 진료과 · {images.length}장 분석</span>
                 </div>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <button style={s.btnSm} onClick={saveToLocal}>{savedToast ? "✓ 저장됨" : "💾 저장"}</button>
+                  <button style={s.btnSm} onClick={downloadCSV}>📥 CSV</button>
                   <button style={s.btnSm} onClick={copyTable}>{copied ? "✓ 복사됨" : "⎘ 복사"}</button>
                   <button style={{ ...s.btnSm, color: "#888" }} onClick={reset}>↺ 새 분석</button>
                 </div>
@@ -442,7 +512,6 @@ export default function App() {
 
               {/* 탭 + 필터링 */}
               <div style={{ padding: "10px 16px", borderBottom: "0.5px solid #eee", display: "flex", flexDirection: "column", gap: 8 }}>
-                {/* 1행: 탭 + 검색 + 진료과 */}
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                   <div style={{ display: "flex", background: "#f4f4f4", borderRadius: 8, padding: 2, flexShrink: 0 }}>
                     {[["table", "☰ 목록"], ["day", "📅 요일별"]].map(([mode, label]) => (
@@ -452,7 +521,6 @@ export default function App() {
                   <input style={s.filterInput} placeholder="의사명 또는 진료과 검색..." value={search} onChange={e => setSearch(e.target.value)} />
                   <DeptDropdown allDepts={allDepts} selected={deptFilters} onChange={setDeptFilters} />
                 </div>
-                {/* 2행: 요일 필 */}
                 <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
                   <span style={{ fontSize: 11, color: "#aaa", marginRight: 2 }}>요일</span>
                   {ALL_DAYS.map(day => {
@@ -469,7 +537,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 목록 뷰 */}
               {viewMode === "table" && (
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
@@ -496,7 +563,6 @@ export default function App() {
                 </div>
               )}
 
-              {/* 요일별 뷰 */}
               {viewMode === "day" && <DayView doctors={doctors} search={search} deptFilters={deptFilters} dayFilters={dayFilters} />}
 
               <div style={{ padding: "12px 16px", borderTop: "0.5px solid #eee" }}>
