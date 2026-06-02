@@ -16,7 +16,10 @@ async function callAPI(base64, mediaType, prompt, apiKey, maxTokens = 2000) {
         { inline_data: { mime_type: mediaType, data: base64 } },
         { text: prompt },
       ]}],
-      generationConfig: { maxOutputTokens: maxTokens },
+      generationConfig: {
+        maxOutputTokens: maxTokens,
+        temperature: 0,
+      },
     }),
   });
   const data = await res.json();
@@ -37,7 +40,7 @@ function getMediaType(file) {
 const PROMPT_HOSPITAL = `이 이미지는 병원 외래 스케줄 표입니다.
 이미지에서 병원명(병원 이름)을 찾아서 정확히 출력하세요.
 병원명만 한 줄로 출력하고, 다른 설명이나 문장은 일절 출력하지 마세요.
-병원명을 상답클리닉, 헤더, 로고 주변 텍스트에서 찾으세요.
+병원명을 헤더, 로고 주변 텍스트에서 찾으세요.
 찾을 수 없다면 아무것도 출력하지 마세요.`;
 
 const PROMPT_DEPTS = `이 이미지는 병원 외래 스케줄 표입니다.
@@ -59,6 +62,15 @@ function makeDeptPrompt(dept) {
   return `이 이미지는 병원 외래 스케줄 표입니다.
 "${dept}" 진료과에 속한 의사들만 추출해서 아래 형식으로 출력하세요.
 다른 설명 없이 데이터 줄만 출력하세요.
+
+⚠️ 의사 이름 정확도 최우선:
+• 이름의 각 한글 글자를 이미지에서 한 글자씩 정확히 읽으세요.
+• 초성·중성·종성을 각각 확인하세요. 
+  예) 현(■ㅇ+■ㅓ+■ㄴ) vs 원(■ㅇ+■ㅓ+■ㄴ 종성없음) — 종성 ㄴ 유무로 구분
+  예) 환 vs 관 — 중성 확인
+  예) 성 vs 생 — 종성 유무 확인
+• 쫐측하지 말고 이미지에 보이는 글자 그대로 입력하세요.
+• 이름 쓰기가 애매하면 이미지를 다시 한 번 자세히 살펴보세요.
 
 형식: 이름|일정목록|진료실|비고
 일정목록: 요일+오전/오후를 쉼표로 (예: 월오전,화오후,수오전)
@@ -314,7 +326,6 @@ export default function App() {
     setStage("analyzing"); setRawLogs([]); setHospitalName("");
     const allDoctors = [];
     try {
-      // 첫 번째 이미지에서 병원명 추출
       const firstImg = images[0];
       setProgress({ imgLabel: firstImg.fileName, imgCurrent: 1, imgTotal: images.length, deptLabel: "병원명 파악 중...", deptCurrent: 0, deptTotal: 0 });
       try {
@@ -523,9 +534,7 @@ export default function App() {
 
           {stage === "results" && (
             <div style={s.card}>
-              {/* 결과 헤더 */}
               <div style={{ padding: "12px 16px", borderBottom: "0.5px solid #eee", display: "flex", flexDirection: "column", gap: 8 }}>
-                {/* 병원명 인라인 편집 */}
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ fontSize: 11, color: "#aaa", flexShrink: 0 }}>병원명</span>
                   {editingHospital ? (
@@ -548,7 +557,6 @@ export default function App() {
                     </button>
                   )}
                 </div>
-                {/* 요약 정보 + 버튼 */}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 500 }}>
                     추출된 외래 일정
@@ -564,7 +572,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 필터 */}
               <div style={{ padding: "10px 16px", borderBottom: "0.5px solid #eee", display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                   <div style={{ display: "flex", background: "#f4f4f4", borderRadius: 8, padding: 2, flexShrink: 0 }}>
