@@ -6,173 +6,6 @@ const GEMINI_URL = (key) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
 const BUNDLED_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
 const SAVE_KEY = "schedule_saved_data";
-const CRITERIA_KEY = "mr_products_v2";
-
-const DEFAULT_PRODUCTS = [
-  {
-    id: 1,
-    name: "리피토",
-    generic: "아토르바스타틴",
-    category: "고지혈증",
-    criteria: `[고지혈증 스타틴 급여 기준]
-
-■ 위험군별 LDL-C 투여 기준
-
-초고위험군 → LDL-C ≥ 70 mg/dL
-• 관상동맥질환(ACS, 안정형협심증, 심근경색)
-• 허혈성 뇌졸중 / TIA
-• 말초혈관질환
-• 당뇨 + 표적장기손상 또는 주요 심혈관 위험인자 ≥3개
-
-고위험군 → LDL-C ≥ 100 mg/dL
-• 당뇨(합병증 없음)
-• 10년 심혈관 위험도 10~20%
-• 만성신질환 3~5단계(투석 제외)
-
-중등도위험군 → LDL-C ≥ 130 mg/dL
-• 주요 위험인자 2개 이상 + 10년 위험도 <10%
-
-저위험군 → LDL-C ≥ 160 mg/dL
-• 위험인자 0~1개
-
-■ 주요 위험인자
-흡연 / 고혈압(≥140/90 또는 강압제 복용) / HDL-C <40 /
-조기 관상동맥질환 가족력 / 연령(남 ≥45세, 여 ≥55세)
-(HDL-C ≥60이면 위험인자 1개 차감)
-
-■ TG 기준
-TG ≥ 500 mg/dL 시 피브레이트 우선, 필요 시 병용 가능
-
-■ 투여 기간
-목표 LDL-C 도달 후 지속 급여 인정`,
-  },
-  {
-    id: 2,
-    name: "리피토플러스",
-    generic: "아토르바스타틴/에제티미브",
-    category: "고지혈증 복합제",
-    criteria: `[스타틴+에제티미브 복합제 급여 기준]
-
-■ 급여 인정 조건
-• 스타틴 단독 최대 내약 용량에서도 목표 LDL-C 미달 시
-  에제티미브 추가(병용) 또는 복합제 교체 급여 인정
-• 스타틴 + 에제티미브 병용으로 안정화된 환자는
-  동일 성분 복합제(리피토플러스)로 교체 급여 인정
-
-■ 위험군별 병용 시작 기준
-
-초고위험군: 스타틴 단독 후 LDL-C ≥ 70 mg/dL 이면 에제티미브 추가
-고위험군: 스타틴 단독 후 LDL-C ≥ 100 mg/dL 이면 에제티미브 추가
-중등도위험군: 스타틴 단독 후 LDL-C ≥ 130 mg/dL 이면 에제티미브 추가
-
-■ 에제티미브 단독 급여
-• 스타틴 금기 또는 근육병증 등 불내성으로 사용 불가 시만 단독 급여
-
-■ 용량
-• 아토르바스타틴 10/40mg + 에제티미브 10mg 1일 1회
-• 스타틴 용량은 기존 스타틴 용량에 맞춰 선택`,
-  },
-  {
-    id: 3,
-    name: "노바스크",
-    generic: "암로디핀",
-    category: "고혈압·협심증",
-    criteria: `[고혈압 / 협심증 급여 기준]
-
-■ 고혈압
-• 일반 고혈압: SBP ≥ 140 mmHg 또는 DBP ≥ 90 mmHg 지속 시
-• 당뇨·만성신질환 동반: SBP ≥ 130 mmHg 또는 DBP ≥ 80 mmHg
-• 65세 이상 수축기단독고혈압: SBP ≥ 140 mmHg
-• 2제 병용 우선순위: ARB/ACEi + CCB 또는 ARB/ACEi + 이뇨제
-
-■ 협심증
-• 안정형 협심증: 베타차단제 또는 CCB 단독·병용 급여 인정
-  (베타차단제 금기·불내성 시 CCB 단독 1차 사용 가능)
-• 혈관연축성(이형) 협심증: CCB 1차 치료제 급여 인정
-
-■ 주의사항
-• CYP3A4 억제제(클라리스로마이신, 케토코나졸 등) 병용 시
-  혈중농도 상승 → 혈압 과도 저하 주의
-• 심한 대동맥협착·심인성 쇼크 금기
-• 말초 부종 발생 시 용량 감량 또는 제형 변경 고려
-
-■ 용량
-• 고혈압: 5 mg 1일 1회 시작 (최대 10 mg)
-• 협심증: 5~10 mg 1일 1회`,
-  },
-  {
-    id: 4,
-    name: "리리카",
-    generic: "프레가발린",
-    category: "신경병증성 통증·간질",
-    criteria: `[프레가발린 급여 기준]
-
-■ 신경병증성 통증
-
-당뇨병성 말초신경병증 통증
-• 용량: 150~600 mg/일 (1일 2~3회 분복)
-• 1차 약제(TCA, duloxetine 등) 효과 부족·부작용 시 급여 인정
-
-대상포진 후 신경통(PHN)
-• 용량: 150~600 mg/일
-• 1차 약제 실패 또는 병용 시 급여 인정
-
-척수손상 후 중추성 신경병증성 통증
-• 용량: 150~600 mg/일
-• 원인 진단명 및 MRI 등 영상 근거 필요
-
-■ 간질 (부분발작 부가요법)
-• 성인: 150~600 mg/일 (기존 항간질약 단독으로 조절 불충분 시)
-• 소아(4세 이상): 2.5~10 mg/kg/일
-
-■ 섬유근통
-• 용량: 300~450 mg/일
-• 진단 기준 충족(압통점 11/18개 이상 또는 2010 ACR 기준) 시
-
-■ 용량 조절
-• 신부전(CrCl < 60 mL/min): 용량 감량 필수
-  CrCl 30~60: 최대 300 mg/일
-  CrCl 15~30: 최대 150 mg/일
-  CrCl < 15: 최대 75 mg/일`,
-  },
-  {
-    id: 5,
-    name: "쎄레브렉스",
-    generic: "세레콕시브",
-    category: "관절염·통증",
-    criteria: `[세레콕시브(COX-2 선택적 억제제) 급여 기준]
-
-■ 적응증별 용량
-
-골관절염(OA)
-• 100 mg 1일 2회 또는 200 mg 1일 1회
-
-류마티스관절염(RA)
-• 100~200 mg 1일 2회
-
-강직성 척추염
-• 200 mg 1일 1회 또는 100 mg 1일 2회 (최대 400 mg/일)
-
-급성통증 / 원발성 월경통
-• 초회 400 mg, 필요 시 200 mg 추가 → 이후 200 mg 1일 2회
-
-■ 우선 급여 적용 대상 (일반 NSAID 대신 COX-2 억제제 선택 시)
-• 소화성궤양·위장관 출혈 기왕력 환자
-• 65세 이상 고령 환자
-• 고용량 NSAID 장기 복용 필요 환자
-• 스테로이드 또는 항혈전제(아스피린 등) 병용 환자
-
-■ 심혈관 주의사항
-• 허혈성 심질환·뇌혈관질환·울혈성 심부전 환자 신중 투여
-• 심혈관 위험인자 있는 경우 최소 유효 용량·최단 기간 사용
-• 아스피린 병용 시 위장관 보호 효과 감소 (PPI 병용 고려)
-
-■ 금기
-• 술폰아미드 과민반응 환자
-• 아스피린 및 NSAIDs 과민반응(천식, 두드러기 등) 환자
-• 중증 심부전`,
-  },
-];
 
 async function callAPI(base64, mediaType, prompt, apiKey, maxTokens = 2000) {
   const res = await fetch(GEMINI_URL(apiKey), {
@@ -352,130 +185,11 @@ function DayView({ doctors, search, deptFilters, dayFilters }) {
   );
 }
 
-/* ── 급여 기준 패널 ──────────────────────────────── */
-function CriteriaPanel({ products, setProducts }) {
-  const [editTarget, setEditTarget] = useState(null);
-  const [form, setForm] = useState({ name: "", generic: "", category: "", criteria: "" });
-
-  useEffect(() => {
-    localStorage.setItem(CRITERIA_KEY, JSON.stringify(products));
-  }, [products]);
-
-  const openNew = () => {
-    setForm({ name: "", generic: "", category: "", criteria: "" });
-    setEditTarget("new");
-  };
-
-  const openEdit = (p) => {
-    setForm({ name: p.name, generic: p.generic || "", category: p.category || "", criteria: p.criteria || "" });
-    setEditTarget(p.id);
-  };
-
-  const save = () => {
-    if (!form.name.trim()) return;
-    if (editTarget === "new") {
-      setProducts(prev => [...prev, { ...form, id: Date.now() }]);
-    } else {
-      setProducts(prev => prev.map(p => p.id === editTarget ? { ...p, ...form } : p));
-    }
-    setEditTarget(null);
-  };
-
-  const deleteProduct = (id) => {
-    if (!window.confirm("이 제품을 삭제하시겠습니까?")) return;
-    setProducts(prev => prev.filter(p => p.id !== id));
-  };
-
-  const inp = { width: "100%", padding: "8px 12px", fontSize: 13, border: "0.5px solid #ddd", borderRadius: 8, outline: "none", boxSizing: "border-box", fontFamily: "inherit", background: "#fafafa", color: "#111" };
-
-  return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <div style={{ fontSize: 13, color: "#888" }}>{products.length}개 제품 · 편집 가능</div>
-        <button onClick={openNew} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer", border: "1px solid #0F6E56", background: "#0F6E56", color: "#E1F5EE" }}>+ 제품 추가</button>
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {products.map(p => (
-          <div key={p.id} style={{ background: "#fff", border: "0.5px solid #ddd", borderRadius: 12, overflow: "hidden" }}>
-            <div style={{ padding: "14px 16px", borderBottom: "0.5px solid #f0f0f0", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", background: "#fafff9" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: "#111" }}>{p.name}</span>
-                {p.generic && <span style={{ fontSize: 12, color: "#888" }}>{p.generic}</span>}
-                {p.category && (
-                  <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 4, fontSize: 11, background: "#E1F5EE", color: "#085041", border: "0.5px solid #9FE1CB" }}>{p.category}</span>
-                )}
-              </div>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button onClick={() => openEdit(p)} style={{ padding: "5px 10px", borderRadius: 8, fontSize: 12, cursor: "pointer", border: "0.5px solid #ddd", background: "transparent", color: "#444" }}>편집</button>
-                <button onClick={() => deleteProduct(p.id)} style={{ padding: "5px 10px", borderRadius: 8, fontSize: 12, cursor: "pointer", border: "0.5px solid #fcc", background: "transparent", color: "#c44" }}>삭제</button>
-              </div>
-            </div>
-            <div style={{ padding: "16px", fontSize: 13, lineHeight: 1.9, color: "#333", whiteSpace: "pre-wrap" }}>
-              {p.criteria}
-            </div>
-          </div>
-        ))}
-        {products.length === 0 && (
-          <div style={{ textAlign: "center", padding: "3rem", color: "#bbb", fontSize: 13, background: "#fff", border: "0.5px solid #ddd", borderRadius: 12 }}>
-            등록된 제품이 없습니다
-            <div style={{ fontSize: 11, marginTop: 6 }}>위 [+ 제품 추가] 버튼으로 추가하세요</div>
-          </div>
-        )}
-      </div>
-
-      {editTarget !== null && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
-          <div style={{ background: "#fff", borderRadius: 14, padding: "1.5rem", width: "100%", maxWidth: 500, boxShadow: "0 8px 40px rgba(0,0,0,0.18)", maxHeight: "90vh", overflowY: "auto" }}>
-            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>{editTarget === "new" ? "제품 추가" : "제품 편집"}</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <div>
-                <div style={{ fontSize: 11, color: "#888", marginBottom: 4 }}>제품명 *</div>
-                <input style={inp} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="예: 리피토" />
-              </div>
-              <div>
-                <div style={{ fontSize: 11, color: "#888", marginBottom: 4 }}>성분명</div>
-                <input style={inp} value={form.generic} onChange={e => setForm(f => ({ ...f, generic: e.target.value }))} placeholder="예: 아토르바스타틴" />
-              </div>
-              <div>
-                <div style={{ fontSize: 11, color: "#888", marginBottom: 4 }}>카테고리 / 적응증</div>
-                <input style={inp} value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} placeholder="예: 고지혈증" />
-              </div>
-              <div>
-                <div style={{ fontSize: 11, color: "#888", marginBottom: 4 }}>급여 기준 내용</div>
-                <textarea
-                  style={{ ...inp, minHeight: 220, resize: "vertical", lineHeight: 1.7 }}
-                  value={form.criteria}
-                  onChange={e => setForm(f => ({ ...f, criteria: e.target.value }))}
-                  placeholder="급여 적용 기준을 입력하세요..."
-                />
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
-              <button onClick={() => setEditTarget(null)} style={{ padding: "8px 14px", borderRadius: 8, fontSize: 13, cursor: "pointer", border: "0.5px solid #ddd", background: "transparent", color: "#555" }}>취소</button>
-              <button onClick={save} style={{ padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer", border: "1px solid #0F6E56", background: "#0F6E56", color: "#E1F5EE" }}>저장</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* ── App ──────────────────────────────────────────────── */
 export default function App() {
   const [apiKey, setApiKey] = useState(() => BUNDLED_API_KEY || localStorage.getItem("gemini_api_key") || "");
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [showApiKeySetup, setShowApiKeySetup] = useState(!BUNDLED_API_KEY && !localStorage.getItem("gemini_api_key"));
-
-  const [appMode, setAppMode] = useState("schedule");
-  const [products, setProducts] = useState(() => {
-    try {
-      const saved = localStorage.getItem(CRITERIA_KEY);
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return DEFAULT_PRODUCTS;
-  });
 
   const [images, setImages] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -640,7 +354,7 @@ export default function App() {
 
   const s = {
     wrap: { maxWidth: 960, margin: "0 auto", padding: "1.5rem", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color: "#111" },
-    header: { display: "flex", alignItems: "center", gap: 12, marginBottom: "1rem", paddingBottom: "1rem", borderBottom: "0.5px solid #eee" },
+    header: { display: "flex", alignItems: "center", gap: 12, marginBottom: "1.5rem", paddingBottom: "1rem", borderBottom: "0.5px solid #eee" },
     iconBox: { width: 36, height: 36, background: "#0F6E56", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
     dropZone: { border: `1.5px dashed ${isDragging ? "#1D9E75" : "#ddd"}`, borderRadius: 12, padding: "1.5rem", textAlign: "center", cursor: "pointer", background: isDragging ? "#E1F5EE" : "#fafafa", transition: "all 0.2s" },
     btnPrimary: { display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer", border: "1px solid #0F6E56", background: "#0F6E56", color: "#E1F5EE" },
@@ -683,193 +397,178 @@ export default function App() {
         )}
       </div>
 
-      {/* 상단 모드 탭 */}
-      <div style={{ display: "flex", background: "#f4f4f4", borderRadius: 10, padding: 3, marginBottom: "1.25rem", gap: 2, width: "fit-content" }}>
-        {[["schedule", "📋 스케줄 분석"], ["criteria", "💊 급여 기준"]].map(([mode, label]) => (
-          <button key={mode} onClick={() => setAppMode(mode)} style={{ padding: "7px 18px", borderRadius: 7, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 500, transition: "all 0.15s", background: appMode === mode ? "#fff" : "transparent", color: appMode === mode ? "#111" : "#888", boxShadow: appMode === mode ? "0 0 0 0.5px #ddd" : "none" }}>
-            {label}
-          </button>
-        ))}
-      </div>
+      {showApiKeySetup && (
+        <div style={s.apiKeyBox}>
+          <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>🔑 Google Gemini API 키 설정</div>
+          <div style={{ fontSize: 12, color: "#888", marginBottom: 4 }}>Gemini API는 <strong>무료</strong>로 사용 가능합니다.</div>
+          <div style={{ fontSize: 12, color: "#0F6E56", marginBottom: 12 }}>
+            키 발급: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color: "#0F6E56" }}>aistudio.google.com/apikey</a> → "Get API key"
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input style={s.apiKeyInput} type="password" placeholder="AIzaSy..." value={apiKeyInput}
+              onChange={e => setApiKeyInput(e.target.value)} onKeyDown={e => e.key === "Enter" && saveApiKey()} />
+            <button style={s.btnPrimary} onClick={saveApiKey}>저장</button>
+          </div>
+        </div>
+      )}
 
-      {appMode === "criteria" ? (
-        <CriteriaPanel products={products} setProducts={setProducts} />
-      ) : (
+      {!showApiKeySetup && (
         <>
-          {showApiKeySetup && (
-            <div style={s.apiKeyBox}>
-              <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>🔑 Google Gemini API 키 설정</div>
-              <div style={{ fontSize: 12, color: "#888", marginBottom: 4 }}>Gemini API는 <strong>무료</strong>로 사용 가능합니다.</div>
-              <div style={{ fontSize: 12, color: "#0F6E56", marginBottom: 12 }}>
-                키 발급: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color: "#0F6E56" }}>aistudio.google.com/apikey</a> → "Get API key"
+          {(stage === "upload" || stage === "preview") && (
+            <div>
+              <div style={s.dropZone} onClick={() => fileRef.current?.click()}
+                onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={e => { e.preventDefault(); setIsDragging(false); addFiles(e.dataTransfer.files); }}>
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={isDragging ? "#0F6E56" : "#bbb"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: "0 auto 8px", display: "block" }}>
+                  <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>
+                </svg>
+                <div style={{ fontSize: 13, color: "#666" }}><strong style={{ color: "#0F6E56" }}>클릭하거나 끌어다 놓아</strong> 사진 추가</div>
+                <div style={{ fontSize: 11, color: "#bbb", marginTop: 4 }}>여러 장 동시 선택 가능 · JPG / PNG / WEBP</div>
+                <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={e => addFiles(e.target.files)} />
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input style={s.apiKeyInput} type="password" placeholder="AIzaSy..." value={apiKeyInput}
-                  onChange={e => setApiKeyInput(e.target.value)} onKeyDown={e => e.key === "Enter" && saveApiKey()} />
-                <button style={s.btnPrimary} onClick={saveApiKey}>저장</button>
+
+              {savedInfo && stage === "upload" && (
+                <div style={{ marginTop: 12, padding: "12px 16px", background: "#f9f9f9", border: "0.5px solid #e0e0e0", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: "#333" }}>💾 저장된 분석 결과</div>
+                    <div style={{ fontSize: 11, color: "#aaa", marginTop: 2 }}>{savedInfo.count}명 · {new Date(savedInfo.savedAt).toLocaleString("ko-KR")}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button style={s.btnGhost} onClick={loadFromSaved}>불러오기</button>
+                    <button style={{ ...s.btnSm, color: "#ccc", fontSize: 11 }} onClick={deleteSaved}>삭제</button>
+                  </div>
+                </div>
+              )}
+
+              {images.length > 0 && (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+                    {images.map((img, idx) => (
+                      <div key={img.id} style={{ position: "relative", width: 86, flexShrink: 0 }}>
+                        <img src={img.src} alt={img.fileName} style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", borderRadius: 8, border: "0.5px solid #ddd", display: "block" }} />
+                        <div style={{ position: "absolute", top: 4, left: 5, fontSize: 10, fontWeight: 700, color: "#fff", background: "rgba(0,0,0,0.45)", borderRadius: 4, padding: "1px 5px" }}>{idx + 1}</div>
+                        <button onClick={() => removeImage(img.id)} style={{ position: "absolute", top: 4, right: 4, width: 18, height: 18, borderRadius: "50%", background: "rgba(0,0,0,0.5)", border: "none", color: "#fff", fontSize: 10, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>✕</button>
+                        <div style={{ fontSize: 10, color: "#aaa", textAlign: "center", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{img.fileSize}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <button style={s.btnPrimary} onClick={analyze}>✦ {images.length}장 전체 분석 시작</button>
+                    <button style={s.btnGhost} onClick={reset}>↺ 초기화</button>
+                    <span style={{ fontSize: 12, color: "#aaa" }}>{images.length}개 이미지 준비됨</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {stage === "analyzing" && (
+            <div style={s.progressCard}>
+              <div style={{ width: 28, height: 28, borderRadius: "50%", border: "2.5px solid #eee", borderTopColor: "#0F6E56", animation: "spin 0.8s linear infinite" }} />
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 12, color: "#aaa", marginBottom: 4 }}>이미지 {progress.imgCurrent} / {progress.imgTotal} <span style={{ fontSize: 11 }}>{progress.imgLabel}</span></div>
+                <div style={{ fontSize: 14, fontWeight: 500 }}>{progress.deptLabel}</div>
+                {progress.deptTotal > 0 && <div style={{ fontSize: 12, color: "#bbb", marginTop: 4 }}>진료과 {progress.deptCurrent} / {progress.deptTotal}</div>}
+              </div>
+              <div style={s.progressBar}><div style={{ height: "100%", width: overallPct + "%", background: "#0F6E56", borderRadius: 99, transition: "width 0.4s ease" }} /></div>
+              <div style={{ fontSize: 12, color: "#bbb" }}>전체 진행률 {overallPct}%</div>
+            </div>
+          )}
+
+          {stage === "error" && (
+            <div>
+              <div style={s.errorBox}>
+                <div style={{ display: "flex", gap: 8, marginBottom: rawLogs.length ? 12 : 0 }}>
+                  <span>⚠</span><div><strong>분석 오류</strong><br />{errorMsg}</div>
+                </div>
+                {rawLogs.length > 0 && (<><div style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}>진행 로그:</div><div style={{ ...s.rawBox, background: "#fff5f5", color: "#791F1F", border: "0.5px solid #F7C1C1" }}>{rawLogs.join("\n\n---\n\n")}</div></>)}
+              </div>
+              <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+                <button style={s.btnGhost} onClick={() => setStage("preview")}>← 다시 시도</button>
+                <button style={s.btnGhost} onClick={reset}>↺ 새 이미지</button>
               </div>
             </div>
           )}
 
-          {!showApiKeySetup && (
-            <>
-              {(stage === "upload" || stage === "preview") && (
-                <div>
-                  <div style={s.dropZone} onClick={() => fileRef.current?.click()}
-                    onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
-                    onDragLeave={() => setIsDragging(false)}
-                    onDrop={e => { e.preventDefault(); setIsDragging(false); addFiles(e.dataTransfer.files); }}>
-                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={isDragging ? "#0F6E56" : "#bbb"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: "0 auto 8px", display: "block" }}>
-                      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>
-                    </svg>
-                    <div style={{ fontSize: 13, color: "#666" }}><strong style={{ color: "#0F6E56" }}>클릭하거나 끌어다 놓아</strong> 사진 추가</div>
-                    <div style={{ fontSize: 11, color: "#bbb", marginTop: 4 }}>여러 장 동시 선택 가능 · JPG / PNG / WEBP</div>
-                    <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={e => addFiles(e.target.files)} />
+          {stage === "results" && (
+            <div style={s.card}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "0.5px solid #eee", flexWrap: "wrap", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 500 }}>
+                  추출된 외래 일정
+                  <span style={s.countBadge}>{viewMode === "table" ? filtered.length : doctors.length}명</span>
+                  <span style={{ fontSize: 11, color: "#aaa", fontWeight: 400 }}>{allDepts.length}개 진료과 · {images.length}장 분석</span>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <button style={s.btnSm} onClick={saveToLocal}>{savedToast ? "✓ 저장됨" : "💾 저장"}</button>
+                  <button style={s.btnSm} onClick={downloadCSV}>📥 CSV</button>
+                  <button style={s.btnSm} onClick={copyTable}>{copied ? "✓ 복사됨" : "⎘ 복사"}</button>
+                  <button style={{ ...s.btnSm, color: "#888" }} onClick={reset}>↺ 새 분석</button>
+                </div>
+              </div>
+
+              <div style={{ padding: "10px 16px", borderBottom: "0.5px solid #eee", display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <div style={{ display: "flex", background: "#f4f4f4", borderRadius: 8, padding: 2, flexShrink: 0 }}>
+                    {[["table", "☰ 목록"], ["day", "📅 요일별"]].map(([mode, label]) => (
+                      <button key={mode} onClick={() => setViewMode(mode)} style={{ padding: "5px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500, transition: "all 0.15s", background: viewMode === mode ? "#fff" : "transparent", color: viewMode === mode ? "#111" : "#888", boxShadow: viewMode === mode ? "0 0 0 0.5px #ddd" : "none" }}>{label}</button>
+                    ))}
                   </div>
-
-                  {savedInfo && stage === "upload" && (
-                    <div style={{ marginTop: 12, padding: "12px 16px", background: "#f9f9f9", border: "0.5px solid #e0e0e0", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 500, color: "#333" }}>💾 저장된 분석 결과</div>
-                        <div style={{ fontSize: 11, color: "#aaa", marginTop: 2 }}>{savedInfo.count}명 · {new Date(savedInfo.savedAt).toLocaleString("ko-KR")}</div>
-                      </div>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <button style={s.btnGhost} onClick={loadFromSaved}>불러오기</button>
-                        <button style={{ ...s.btnSm, color: "#ccc", fontSize: 11 }} onClick={deleteSaved}>삭제</button>
-                      </div>
-                    </div>
-                  )}
-
-                  {images.length > 0 && (
-                    <div style={{ marginTop: 14 }}>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-                        {images.map((img, idx) => (
-                          <div key={img.id} style={{ position: "relative", width: 86, flexShrink: 0 }}>
-                            <img src={img.src} alt={img.fileName} style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", borderRadius: 8, border: "0.5px solid #ddd", display: "block" }} />
-                            <div style={{ position: "absolute", top: 4, left: 5, fontSize: 10, fontWeight: 700, color: "#fff", background: "rgba(0,0,0,0.45)", borderRadius: 4, padding: "1px 5px" }}>{idx + 1}</div>
-                            <button onClick={() => removeImage(img.id)} style={{ position: "absolute", top: 4, right: 4, width: 18, height: 18, borderRadius: "50%", background: "rgba(0,0,0,0.5)", border: "none", color: "#fff", fontSize: 10, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>✕</button>
-                            <div style={{ fontSize: 10, color: "#aaa", textAlign: "center", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{img.fileSize}</div>
-                          </div>
-                        ))}
-                      </div>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <button style={s.btnPrimary} onClick={analyze}>✦ {images.length}장 전체 분석 시작</button>
-                        <button style={s.btnGhost} onClick={reset}>↺ 초기화</button>
-                        <span style={{ fontSize: 12, color: "#aaa" }}>{images.length}개 이미지 준비됨</span>
-                      </div>
-                    </div>
+                  <input style={s.filterInput} placeholder="의사명 또는 진료과 검색..." value={search} onChange={e => setSearch(e.target.value)} />
+                  <DeptDropdown allDepts={allDepts} selected={deptFilters} onChange={setDeptFilters} />
+                </div>
+                <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 11, color: "#aaa", marginRight: 2 }}>요일</span>
+                  {ALL_DAYS.map(day => {
+                    const active = dayFilters.includes(day);
+                    return (
+                      <button key={day} onClick={() => toggleDay(day)} style={{ padding: "4px 10px", borderRadius: 6, border: `0.5px solid ${active ? "#0F6E56" : "#ddd"}`, background: active ? "#E1F5EE" : "transparent", color: active ? "#085041" : "#666", fontSize: 12, cursor: "pointer", fontWeight: active ? 600 : 400, transition: "all 0.12s" }}>
+                        {day}
+                      </button>
+                    );
+                  })}
+                  {dayFilters.length > 0 && (
+                    <button onClick={() => setDayFilters([])} style={{ padding: "4px 8px", borderRadius: 6, border: "0.5px solid #ddd", background: "transparent", color: "#aaa", fontSize: 11, cursor: "pointer" }}>✕</button>
                   )}
                 </div>
-              )}
+              </div>
 
-              {stage === "analyzing" && (
-                <div style={s.progressCard}>
-                  <div style={{ width: 28, height: 28, borderRadius: "50%", border: "2.5px solid #eee", borderTopColor: "#0F6E56", animation: "spin 0.8s linear infinite" }} />
-                  <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 12, color: "#aaa", marginBottom: 4 }}>이미지 {progress.imgCurrent} / {progress.imgTotal} <span style={{ fontSize: 11 }}>{progress.imgLabel}</span></div>
-                    <div style={{ fontSize: 14, fontWeight: 500 }}>{progress.deptLabel}</div>
-                    {progress.deptTotal > 0 && <div style={{ fontSize: 12, color: "#bbb", marginTop: 4 }}>진료과 {progress.deptCurrent} / {progress.deptTotal}</div>}
-                  </div>
-                  <div style={s.progressBar}><div style={{ height: "100%", width: overallPct + "%", background: "#0F6E56", borderRadius: 99, transition: "width 0.4s ease" }} /></div>
-                  <div style={{ fontSize: 12, color: "#bbb" }}>전체 진행률 {overallPct}%</div>
+              {viewMode === "table" && (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+                    <colgroup><col style={{ width: 100 }}/><col style={{ width: 110 }}/><col style={{ width: 200 }}/><col style={{ width: 70 }}/><col /></colgroup>
+                    <thead><tr>{["의사명","진료과","외래 일정","진료실","비고"].map(h => <th key={h} style={s.th}>{h}</th>)}</tr></thead>
+                    <tbody>
+                      {filtered.length === 0
+                        ? <tr><td colSpan={5} style={{ ...s.td, textAlign: "center", color: "#bbb", padding: "2rem" }}>검색 결과가 없습니다</td></tr>
+                        : filtered.map((d, i) => (
+                          <tr key={i}>
+                            <td style={s.td}><span style={{ fontWeight: 500 }}>{d.name||"-"}</span></td>
+                            <td style={s.td}><span style={s.deptBadge}>{d.department||"-"}</span></td>
+                            <td style={s.td}>{!(d.schedule||[]).length
+                              ? <span style={{ color: "#bbb", fontSize: 12 }}>정보 없음</span>
+                              : (d.schedule||[]).map((sc, j) => <span key={j} style={sc.period === "PM" ? s.pillPM : s.pillAM}>{sc.day} {sc.period === "PM" ? "오후" : "오전"}</span>)
+                            }</td>
+                            <td style={{ ...s.td, fontFamily: "monospace", fontSize: 12 }}>{d.room||"-"}</td>
+                            <td style={{ ...s.td, fontSize: 12, color: "#666" }}>{d.notes||"-"}</td>
+                          </tr>
+                        ))
+                      }
+                    </tbody>
+                  </table>
                 </div>
               )}
 
-              {stage === "error" && (
-                <div>
-                  <div style={s.errorBox}>
-                    <div style={{ display: "flex", gap: 8, marginBottom: rawLogs.length ? 12 : 0 }}>
-                      <span>⚠</span><div><strong>분석 오류</strong><br />{errorMsg}</div>
-                    </div>
-                    {rawLogs.length > 0 && (<><div style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}>진행 로그:</div><div style={{ ...s.rawBox, background: "#fff5f5", color: "#791F1F", border: "0.5px solid #F7C1C1" }}>{rawLogs.join("\n\n---\n\n")}</div></>)}
-                  </div>
-                  <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-                    <button style={s.btnGhost} onClick={() => setStage("preview")}>← 다시 시도</button>
-                    <button style={s.btnGhost} onClick={reset}>↺ 새 이미지</button>
-                  </div>
-                </div>
-              )}
+              {viewMode === "day" && <DayView doctors={doctors} search={search} deptFilters={deptFilters} dayFilters={dayFilters} />}
 
-              {stage === "results" && (
-                <div style={s.card}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "0.5px solid #eee", flexWrap: "wrap", gap: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 500 }}>
-                      추출된 외래 일정
-                      <span style={s.countBadge}>{viewMode === "table" ? filtered.length : doctors.length}명</span>
-                      <span style={{ fontSize: 11, color: "#aaa", fontWeight: 400 }}>{allDepts.length}개 진료과 · {images.length}장 분석</span>
-                    </div>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      <button style={s.btnSm} onClick={saveToLocal}>{savedToast ? "✓ 저장됨" : "💾 저장"}</button>
-                      <button style={s.btnSm} onClick={downloadCSV}>📥 CSV</button>
-                      <button style={s.btnSm} onClick={copyTable}>{copied ? "✓ 복사됨" : "⎘ 복사"}</button>
-                      <button style={{ ...s.btnSm, color: "#888" }} onClick={reset}>↺ 새 분석</button>
-                    </div>
-                  </div>
-
-                  <div style={{ padding: "10px 16px", borderBottom: "0.5px solid #eee", display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                      <div style={{ display: "flex", background: "#f4f4f4", borderRadius: 8, padding: 2, flexShrink: 0 }}>
-                        {[["table", "☰ 목록"], ["day", "📅 요일별"]].map(([mode, label]) => (
-                          <button key={mode} onClick={() => setViewMode(mode)} style={{ padding: "5px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 500, transition: "all 0.15s", background: viewMode === mode ? "#fff" : "transparent", color: viewMode === mode ? "#111" : "#888", boxShadow: viewMode === mode ? "0 0 0 0.5px #ddd" : "none" }}>{label}</button>
-                        ))}
-                      </div>
-                      <input style={s.filterInput} placeholder="의사명 또는 진료과 검색..." value={search} onChange={e => setSearch(e.target.value)} />
-                      <DeptDropdown allDepts={allDepts} selected={deptFilters} onChange={setDeptFilters} />
-                    </div>
-                    <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
-                      <span style={{ fontSize: 11, color: "#aaa", marginRight: 2 }}>요일</span>
-                      {ALL_DAYS.map(day => {
-                        const active = dayFilters.includes(day);
-                        return (
-                          <button key={day} onClick={() => toggleDay(day)} style={{ padding: "4px 10px", borderRadius: 6, border: `0.5px solid ${active ? "#0F6E56" : "#ddd"}`, background: active ? "#E1F5EE" : "transparent", color: active ? "#085041" : "#666", fontSize: 12, cursor: "pointer", fontWeight: active ? 600 : 400, transition: "all 0.12s" }}>
-                            {day}
-                          </button>
-                        );
-                      })}
-                      {dayFilters.length > 0 && (
-                        <button onClick={() => setDayFilters([])} style={{ padding: "4px 8px", borderRadius: 6, border: "0.5px solid #ddd", background: "transparent", color: "#aaa", fontSize: 11, cursor: "pointer" }}>✕</button>
-                      )}
-                    </div>
-                  </div>
-
-                  {viewMode === "table" && (
-                    <div style={{ overflowX: "auto" }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-                        <colgroup><col style={{ width: 100 }}/><col style={{ width: 110 }}/><col style={{ width: 200 }}/><col style={{ width: 70 }}/><col /></colgroup>
-                        <thead><tr>{["의사명","진료과","외래 일정","진료실","비고"].map(h => <th key={h} style={s.th}>{h}</th>)}</tr></thead>
-                        <tbody>
-                          {filtered.length === 0
-                            ? <tr><td colSpan={5} style={{ ...s.td, textAlign: "center", color: "#bbb", padding: "2rem" }}>검색 결과가 없습니다</td></tr>
-                            : filtered.map((d, i) => (
-                              <tr key={i}>
-                                <td style={s.td}><span style={{ fontWeight: 500 }}>{d.name||"-"}</span></td>
-                                <td style={s.td}><span style={s.deptBadge}>{d.department||"-"}</span></td>
-                                <td style={s.td}>{!(d.schedule||[]).length
-                                  ? <span style={{ color: "#bbb", fontSize: 12 }}>정보 없음</span>
-                                  : (d.schedule||[]).map((sc, j) => <span key={j} style={sc.period === "PM" ? s.pillPM : s.pillAM}>{sc.day} {sc.period === "PM" ? "오후" : "오전"}</span>)
-                                }</td>
-                                <td style={{ ...s.td, fontFamily: "monospace", fontSize: 12 }}>{d.room||"-"}</td>
-                                <td style={{ ...s.td, fontSize: 12, color: "#666" }}>{d.notes||"-"}</td>
-                              </tr>
-                            ))
-                          }
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {viewMode === "day" && <DayView doctors={doctors} search={search} deptFilters={deptFilters} dayFilters={dayFilters} />}
-
-                  <div style={{ padding: "12px 16px", borderTop: "0.5px solid #eee" }}>
-                    <button style={{ fontSize: 12, color: "#aaa", cursor: "pointer", background: "none", border: "none", display: "flex", alignItems: "center", gap: 6, padding: 0 }} onClick={() => setShowRaw(r => !r)}>
-                      {"</>"} {showRaw ? "분석 로그 숨기기" : `분석 로그 보기 (${rawLogs.length}개 항목)`}
-                    </button>
-                    {showRaw && <div style={s.rawBox}>{rawLogs.join("\n\n---\n\n")}</div>}
-                  </div>
-                </div>
-              )}
-            </>
+              <div style={{ padding: "12px 16px", borderTop: "0.5px solid #eee" }}>
+                <button style={{ fontSize: 12, color: "#aaa", cursor: "pointer", background: "none", border: "none", display: "flex", alignItems: "center", gap: 6, padding: 0 }} onClick={() => setShowRaw(r => !r)}>
+                  {"</>"} {showRaw ? "분석 로그 숨기기" : `분석 로그 보기 (${rawLogs.length}개 항목)`}
+                </button>
+                {showRaw && <div style={s.rawBox}>{rawLogs.join("\n\n---\n\n")}</div>}
+              </div>
+            </div>
           )}
         </>
       )}
