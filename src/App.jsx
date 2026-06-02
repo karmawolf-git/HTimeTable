@@ -6,7 +6,7 @@ const GEMINI_URL = (key) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
 const BUNDLED_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
 const SAVE_KEY = "schedule_saved_data";
-const CRITERIA_KEY = "mr_products";
+const CRITERIA_KEY = "mr_products_v2";
 
 const DEFAULT_PRODUCTS = [
   {
@@ -48,6 +48,32 @@ TG ≥ 500 mg/dL 시 피브레이트 우선, 필요 시 병용 가능
   },
   {
     id: 2,
+    name: "리피토플러스",
+    generic: "아토르바스타틴/에제티미브",
+    category: "고지혈증 복합제",
+    criteria: `[스타틴+에제티미브 복합제 급여 기준]
+
+■ 급여 인정 조건
+• 스타틴 단독 최대 내약 용량에서도 목표 LDL-C 미달 시
+  에제티미브 추가(병용) 또는 복합제 교체 급여 인정
+• 스타틴 + 에제티미브 병용으로 안정화된 환자는
+  동일 성분 복합제(리피토플러스)로 교체 급여 인정
+
+■ 위험군별 병용 시작 기준
+
+초고위험군: 스타틴 단독 후 LDL-C ≥ 70 mg/dL 이면 에제티미브 추가
+고위험군: 스타틴 단독 후 LDL-C ≥ 100 mg/dL 이면 에제티미브 추가
+중등도위험군: 스타틴 단독 후 LDL-C ≥ 130 mg/dL 이면 에제티미브 추가
+
+■ 에제티미브 단독 급여
+• 스타틴 금기 또는 근육병증 등 불내성으로 사용 불가 시만 단독 급여
+
+■ 용량
+• 아토르바스타틴 10/40mg + 에제티미브 10mg 1일 1회
+• 스타틴 용량은 기존 스타틴 용량에 맞춰 선택`,
+  },
+  {
+    id: 3,
     name: "노바스크",
     generic: "암로디핀",
     category: "고혈압·협심증",
@@ -61,18 +87,90 @@ TG ≥ 500 mg/dL 시 피브레이트 우선, 필요 시 병용 가능
 
 ■ 협심증
 • 안정형 협심증: 베타차단제 또는 CCB 단독·병용 급여 인정
-  (베타차단제 금기 또는 불내성 시 CCB 단독 1차 사용 가능)
+  (베타차단제 금기·불내성 시 CCB 단독 1차 사용 가능)
 • 혈관연축성(이형) 협심증: CCB 1차 치료제 급여 인정
 
 ■ 주의사항
 • CYP3A4 억제제(클라리스로마이신, 케토코나졸 등) 병용 시
   혈중농도 상승 → 혈압 과도 저하 주의
 • 심한 대동맥협착·심인성 쇼크 금기
-• 말초 부종 발생 시 용량 감량 또는 이뇨제 추가 고려
+• 말초 부종 발생 시 용량 감량 또는 제형 변경 고려
 
 ■ 용량
-• 고혈압: 5 mg 1일 1회 (최대 10 mg)
+• 고혈압: 5 mg 1일 1회 시작 (최대 10 mg)
 • 협심증: 5~10 mg 1일 1회`,
+  },
+  {
+    id: 4,
+    name: "리리카",
+    generic: "프레가발린",
+    category: "신경병증성 통증·간질",
+    criteria: `[프레가발린 급여 기준]
+
+■ 신경병증성 통증
+
+당뇨병성 말초신경병증 통증
+• 용량: 150~600 mg/일 (1일 2~3회 분복)
+• 1차 약제(TCA, duloxetine 등) 효과 부족·부작용 시 급여 인정
+
+대상포진 후 신경통(PHN)
+• 용량: 150~600 mg/일
+• 1차 약제 실패 또는 병용 시 급여 인정
+
+척수손상 후 중추성 신경병증성 통증
+• 용량: 150~600 mg/일
+• 원인 진단명 및 MRI 등 영상 근거 필요
+
+■ 간질 (부분발작 부가요법)
+• 성인: 150~600 mg/일 (기존 항간질약 단독으로 조절 불충분 시)
+• 소아(4세 이상): 2.5~10 mg/kg/일
+
+■ 섬유근통
+• 용량: 300~450 mg/일
+• 진단 기준 충족(압통점 11/18개 이상 또는 2010 ACR 기준) 시
+
+■ 용량 조절
+• 신부전(CrCl < 60 mL/min): 용량 감량 필수
+  CrCl 30~60: 최대 300 mg/일
+  CrCl 15~30: 최대 150 mg/일
+  CrCl < 15: 최대 75 mg/일`,
+  },
+  {
+    id: 5,
+    name: "쎄레브렉스",
+    generic: "세레콕시브",
+    category: "관절염·통증",
+    criteria: `[세레콕시브(COX-2 선택적 억제제) 급여 기준]
+
+■ 적응증별 용량
+
+골관절염(OA)
+• 100 mg 1일 2회 또는 200 mg 1일 1회
+
+류마티스관절염(RA)
+• 100~200 mg 1일 2회
+
+강직성 척추염
+• 200 mg 1일 1회 또는 100 mg 1일 2회 (최대 400 mg/일)
+
+급성통증 / 원발성 월경통
+• 초회 400 mg, 필요 시 200 mg 추가 → 이후 200 mg 1일 2회
+
+■ 우선 급여 적용 대상 (일반 NSAID 대신 COX-2 억제제 선택 시)
+• 소화성궤양·위장관 출혈 기왕력 환자
+• 65세 이상 고령 환자
+• 고용량 NSAID 장기 복용 필요 환자
+• 스테로이드 또는 항혈전제(아스피린 등) 병용 환자
+
+■ 심혈관 주의사항
+• 허혈성 심질환·뇌혈관질환·울혈성 심부전 환자 신중 투여
+• 심혈관 위험인자 있는 경우 최소 유효 용량·최단 기간 사용
+• 아스피린 병용 시 위장관 보호 효과 감소 (PPI 병용 고려)
+
+■ 금기
+• 술폰아미드 과민반응 환자
+• 아스피린 및 NSAIDs 과민반응(천식, 두드러기 등) 환자
+• 중증 심부전`,
   },
 ];
 
@@ -254,7 +352,7 @@ function DayView({ doctors, search, deptFilters, dayFilters }) {
   );
 }
 
-/* ── 급여 기준 패널 ─────────────────────────────── */
+/* ── 급여 기준 패널 ──────────────────────────────── */
 function CriteriaPanel({ products, setProducts }) {
   const [editTarget, setEditTarget] = useState(null);
   const [form, setForm] = useState({ name: "", generic: "", category: "", criteria: "" });
@@ -293,7 +391,7 @@ function CriteriaPanel({ products, setProducts }) {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <div style={{ fontSize: 13, color: "#888" }}>{products.length}개 제품 · 직접 편집 가능</div>
+        <div style={{ fontSize: 13, color: "#888" }}>{products.length}개 제품 · 편집 가능</div>
         <button onClick={openNew} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer", border: "1px solid #0F6E56", background: "#0F6E56", color: "#E1F5EE" }}>+ 제품 추가</button>
       </div>
 
