@@ -34,6 +34,12 @@ function getMediaType(file) {
   return "image/jpeg";
 }
 
+const PROMPT_HOSPITAL = `이 이미지는 병원 외래 스케줄 표입니다.
+이미지에서 병원명(병원 이름)을 찾아서 정확히 출력하세요.
+병원명만 한 줄로 출력하고, 다른 설명이나 문장은 일절 출력하지 마세요.
+병원명을 상답클리닉, 헤더, 로고 주변 텍스트에서 찾으세요.
+찾을 수 없다면 아무것도 출력하지 마세요.`;
+
 const PROMPT_DEPTS = `이 이미지는 병원 외래 스케줄 표입니다.
 스케줄 표 전체를 꼼꼼히 살펴서 모든 진료과를 반드시 전부 빠짐없이 추출하세요.
 일부만 나열하지 말고, 이미지에 보이는 모든 진료과를 나열하세요.
@@ -199,6 +205,9 @@ export default function App() {
   const [stage, setStage] = useState("upload");
   const [progress, setProgress] = useState({ imgLabel: "", imgCurrent: 0, imgTotal: 0, deptLabel: "", deptCurrent: 0, deptTotal: 0 });
   const [doctors, setDoctors] = useState([]);
+  const [hospitalName, setHospitalName] = useState("");
+  const [editingHospital, setEditingHospital] = useState(false);
+  const hospitalInputRef = useRef();
   const [rawLogs, setRawLogs] = useState([]);
   const [showRaw, setShowRaw] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -214,9 +223,13 @@ export default function App() {
       const raw = localStorage.getItem(SAVE_KEY);
       if (!raw) return null;
       const d = JSON.parse(raw);
-      return { savedAt: d.savedAt, count: d.count };
+      return { savedAt: d.savedAt, count: d.count, hospitalName: d.hospitalName || "" };
     } catch { return null; }
   });
+
+  useEffect(() => {
+    if (editingHospital) hospitalInputRef.current?.focus();
+  }, [editingHospital]);
 
   const saveApiKey = () => {
     const key = apiKeyInput.trim();
@@ -244,6 +257,7 @@ export default function App() {
 
   const reset = () => {
     setStage("upload"); setImages([]); setDoctors([]);
+    setHospitalName(""); setEditingHospital(false);
     setSearch(""); setDeptFilters([]); setDayFilters([]);
     setShowRaw(false); setErrorMsg(""); setRawLogs([]);
     setViewMode("table");
@@ -251,9 +265,9 @@ export default function App() {
   };
 
   const saveToLocal = () => {
-    const info = { doctors, savedAt: new Date().toISOString(), count: doctors.length };
+    const info = { doctors, hospitalName, savedAt: new Date().toISOString(), count: doctors.length };
     localStorage.setItem(SAVE_KEY, JSON.stringify(info));
-    setSavedInfo({ savedAt: info.savedAt, count: info.count });
+    setSavedInfo({ savedAt: info.savedAt, count: info.count, hospitalName });
     setSavedToast(true);
     setTimeout(() => setSavedToast(false), 1500);
   };
@@ -264,6 +278,7 @@ export default function App() {
       if (!raw) return;
       const data = JSON.parse(raw);
       setDoctors(data.doctors);
+      setHospitalName(data.hospitalName || "");
       setStage("results");
     } catch { alert("저장 데이터를 불러오는 데 실패했습니다."); }
   };
@@ -289,15 +304,26 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `외래스케줄_${new Date().toISOString().slice(0,10)}.csv`;
+    const namePart = hospitalName ? `_${hospitalName}` : "";
+    a.download = `외래스케줄${namePart}_${new Date().toISOString().slice(0,10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   const analyze = async () => {
-    setStage("analyzing"); setRawLogs([]);
+    setStage("analyzing"); setRawLogs([]); setHospitalName("");
     const allDoctors = [];
     try {
+      // 첫 번째 이미지에서 병원명 추출
+      const firstImg = images[0];
+      setProgress({ imgLabel: firstImg.fileName, imgCurrent: 1, imgTotal: images.length, deptLabel: "병원명 파악 중...", deptCurrent: 0, deptTotal: 0 });
+      try {
+        const nameRaw = await callAPI(firstImg.base64, firstImg.mediaType, PROMPT_HOSPITAL, apiKey, 100);
+        const extractedName = nameRaw.trim().split("\n")[0].trim();
+        if (extractedName) setHospitalName(extractedName);
+        setRawLogs(l => [...l, `[병원명 추출] ${extractedName || "(미확인)"}`]);
+      } catch {}
+
       for (let imgIdx = 0; imgIdx < images.length; imgIdx++) {
         const img = images[imgIdx];
         setProgress({ imgLabel: img.fileName, imgCurrent: imgIdx + 1, imgTotal: images.length, deptLabel: "진료과 목록 파악 중...", deptCurrent: 0, deptTotal: 0 });
@@ -432,7 +458,10 @@ export default function App() {
                 <div style={{ marginTop: 12, padding: "12px 16px", background: "#f9f9f9", border: "0.5px solid #e0e0e0", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 500, color: "#333" }}>💾 저장된 분석 결과</div>
-                    <div style={{ fontSize: 11, color: "#aaa", marginTop: 2 }}>{savedInfo.count}명 · {new Date(savedInfo.savedAt).toLocaleString("ko-KR")}</div>
+                    <div style={{ fontSize: 11, color: "#aaa", marginTop: 2 }}>
+                      {savedInfo.hospitalName && <span style={{ marginRight: 6, color: "#555" }}>{savedInfo.hospitalName} ·</span>}
+                      {savedInfo.count}명 · {new Date(savedInfo.savedAt).toLocaleString("ko-KR")}
+                    </div>
                   </div>
                   <div style={{ display: "flex", gap: 6 }}>
                     <button style={s.btnGhost} onClick={loadFromSaved}>불러오기</button>
@@ -494,20 +523,48 @@ export default function App() {
 
           {stage === "results" && (
             <div style={s.card}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "0.5px solid #eee", flexWrap: "wrap", gap: 8 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 500 }}>
-                  추출된 외래 일정
-                  <span style={s.countBadge}>{viewMode === "table" ? filtered.length : doctors.length}명</span>
-                  <span style={{ fontSize: 11, color: "#aaa", fontWeight: 400 }}>{allDepts.length}개 진료과 · {images.length}장 분석</span>
+              {/* 결과 헤더 */}
+              <div style={{ padding: "12px 16px", borderBottom: "0.5px solid #eee", display: "flex", flexDirection: "column", gap: 8 }}>
+                {/* 병원명 인라인 편집 */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 11, color: "#aaa", flexShrink: 0 }}>병원명</span>
+                  {editingHospital ? (
+                    <input
+                      ref={hospitalInputRef}
+                      value={hospitalName}
+                      onChange={e => setHospitalName(e.target.value)}
+                      onBlur={() => setEditingHospital(false)}
+                      onKeyDown={e => { if (e.key === "Enter" || e.key === "Escape") setEditingHospital(false); }}
+                      placeholder="병원명 입력..."
+                      style={{ fontSize: 13, fontWeight: 500, border: "0.5px solid #0F6E56", borderRadius: 6, padding: "3px 8px", outline: "none", color: "#111", background: "#f9fff9", minWidth: 160 }}
+                    />
+                  ) : (
+                    <button
+                      onClick={() => setEditingHospital(true)}
+                      style={{ fontSize: 13, fontWeight: 500, color: hospitalName ? "#111" : "#bbb", background: "transparent", border: "0.5px solid transparent", borderRadius: 6, padding: "3px 8px", cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}
+                    >
+                      {hospitalName || "병원명 클릭하여 수정"}
+                      <span style={{ fontSize: 11, color: "#bbb" }}>✎</span>
+                    </button>
+                  )}
                 </div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  <button style={s.btnSm} onClick={saveToLocal}>{savedToast ? "✓ 저장됨" : "💾 저장"}</button>
-                  <button style={s.btnSm} onClick={downloadCSV}>📥 CSV</button>
-                  <button style={s.btnSm} onClick={copyTable}>{copied ? "✓ 복사됨" : "⎘ 복사"}</button>
-                  <button style={{ ...s.btnSm, color: "#888" }} onClick={reset}>↺ 새 분석</button>
+                {/* 요약 정보 + 버튼 */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 500 }}>
+                    추출된 외래 일정
+                    <span style={s.countBadge}>{viewMode === "table" ? filtered.length : doctors.length}명</span>
+                    <span style={{ fontSize: 11, color: "#aaa", fontWeight: 400 }}>{allDepts.length}개 진료과 · {images.length}장 분석</span>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <button style={s.btnSm} onClick={saveToLocal}>{savedToast ? "✓ 저장됨" : "💾 저장"}</button>
+                    <button style={s.btnSm} onClick={downloadCSV}>📥 CSV</button>
+                    <button style={s.btnSm} onClick={copyTable}>{copied ? "✓ 복사됨" : "⎘ 복사"}</button>
+                    <button style={{ ...s.btnSm, color: "#888" }} onClick={reset}>↺ 새 분석</button>
+                  </div>
                 </div>
               </div>
 
+              {/* 필터 */}
               <div style={{ padding: "10px 16px", borderBottom: "0.5px solid #eee", display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                   <div style={{ display: "flex", background: "#f4f4f4", borderRadius: 8, padding: 2, flexShrink: 0 }}>
