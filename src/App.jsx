@@ -215,7 +215,7 @@ export default function App() {
   const fileRef = useRef();
 
   const [stage, setStage] = useState("upload");
-  const [progress, setProgress] = useState({ imgLabel: "", imgCurrent: 0, imgTotal: 0, deptLabel: "", deptCurrent: 0, deptTotal: 0 });
+  const [progress, setProgress] = useState({ imgCurrent: 0, imgTotal: 0, deptLabel: "", deptCurrent: 0, deptTotal: 0 });
   const [doctors, setDoctors] = useState([]);
   const [hospitalName, setHospitalName] = useState("");
   const [editingHospital, setEditingHospital] = useState(false);
@@ -326,25 +326,43 @@ export default function App() {
     setStage("analyzing"); setRawLogs([]); setHospitalName("");
     const allDoctors = [];
     try {
+      // 1. 병원명 추출 (첫 번째 이미지)
       const firstImg = images[0];
-      setProgress({ imgLabel: firstImg.fileName, imgCurrent: 1, imgTotal: images.length, deptLabel: "병원명 파악 중...", deptCurrent: 0, deptTotal: 0 });
+      setProgress({ imgCurrent: 0, imgTotal: images.length, deptLabel: "병원명 파악 중...", deptCurrent: 0, deptTotal: 0 });
       try {
         const nameRaw = await callAPI(firstImg.base64, firstImg.mediaType, PROMPT_HOSPITAL, apiKey, 100);
         const extractedName = nameRaw.trim().split("\n")[0].trim();
         if (extractedName) setHospitalName(extractedName);
-        setRawLogs(l => [...l, `[병원명 추출] ${extractedName || "(미확인)"}` ]);
+        setRawLogs(l => [...l, `[병원명 추출] ${extractedName || "(미확인)"}`]);
       } catch {}
 
-      for (let imgIdx = 0; imgIdx < images.length; imgIdx++) {
-        const img = images[imgIdx];
-        setProgress({ imgLabel: img.fileName, imgCurrent: imgIdx + 1, imgTotal: images.length, deptLabel: "진료과 목록 파악 중...", deptCurrent: 0, deptTotal: 0 });
+      // 2. 모든 이미지에서 진료과 목록 동시 추출
+      setProgress({ imgCurrent: 0, imgTotal: images.length, deptLabel: "진료과 목록 파악 중...", deptCurrent: 0, deptTotal: 0 });
+      let deptsDone = 0;
+      const imageDepts = await Promise.all(images.map(async (img, imgIdx) => {
         const deptsRaw = await callAPI(img.base64, img.mediaType, PROMPT_DEPTS, apiKey, 4096);
         setRawLogs(l => [...l, `[이미지 ${imgIdx + 1}: ${img.fileName}]\n[진료과 목록]\n${deptsRaw}`]);
         const depts = deptsRaw.split("\n").map(l => l.trim()).filter(l => l && l.length > 1 && !l.includes("|"));
-        if (!depts.length) { setRawLogs(l => [...l, `[이미지 ${imgIdx + 1}] 진료과 없음, 건너뜀`]); continue; }
-        for (let di = 0; di < depts.length; di++) {
-          const dept = depts[di];
-          setProgress({ imgLabel: img.fileName, imgCurrent: imgIdx + 1, imgTotal: images.length, deptLabel: `${dept} 의사 추출 중...`, deptCurrent: di + 1, deptTotal: depts.length });
+        if (!depts.length) setRawLogs(l => [...l, `[이미지 ${imgIdx + 1}] 진료과 없음, 건너뜀`]);
+        deptsDone++;
+        setProgress(p => ({ ...p, imgCurrent: deptsDone }));
+        return { img, imgIdx, depts };
+      }));
+
+      // 3. 모든 진료과의 의사 정보를 4개씩 병렬 추출
+      const tasks = [];
+      imageDepts.forEach(({ img, imgIdx, depts }) => {
+        depts.forEach(dept => tasks.push({ img, imgIdx, dept }));
+      });
+      if (!tasks.length) throw new Error("진료과 정보를 추출할 수 없었습니다.");
+
+      const CONCURRENCY = 4;
+      let done = 0;
+      setProgress(p => ({ ...p, deptLabel: "의사 정보 추출 중...", deptCurrent: 0, deptTotal: tasks.length }));
+
+      for (let i = 0; i < tasks.length; i += CONCURRENCY) {
+        const batch = tasks.slice(i, i + CONCURRENCY);
+        await Promise.allSettled(batch.map(async ({ img, imgIdx, dept }) => {
           try {
             const deptRaw = await callAPI(img.base64, img.mediaType, makeDeptPrompt(dept), apiKey, 2000);
             setRawLogs(l => [...l, `[이미지 ${imgIdx + 1} / ${dept}]\n${deptRaw}`]);
@@ -352,10 +370,11 @@ export default function App() {
           } catch (e) {
             setRawLogs(l => [...l, `[이미지 ${imgIdx + 1} / ${dept}] 오류: ${e.message}`]);
           }
-          if (di < depts.length - 1) await new Promise(r => setTimeout(r, 300));
-        }
-        if (imgIdx < images.length - 1) await new Promise(r => setTimeout(r, 500));
+          done++;
+          setProgress(p => ({ ...p, deptCurrent: done, deptLabel: `${dept} 추출 완료 (${done}/${tasks.length})` }));
+        }));
       }
+
       if (!allDoctors.length) throw new Error("의사 정보를 추출할 수 없었습니다.");
       const unique = allDoctors.filter((d, i, arr) =>
         arr.findIndex(x => x.name === d.name && x.department === d.department) === i
@@ -385,9 +404,13 @@ export default function App() {
 
   const toggleDay = (day) => setDayFilters(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]);
 
-  const overallPct = progress.imgTotal > 0
-    ? Math.round(((progress.imgCurrent - 1 + (progress.deptTotal > 0 ? progress.deptCurrent / progress.deptTotal : 0)) / progress.imgTotal) * 100)
-    : 5;
+  // 진행률: 1단계(진료과 파악) 30% + 2단계(의사 추출) 70%
+  const overallPct = (() => {
+    if (progress.imgTotal === 0) return 5;
+    const phase1 = (progress.imgCurrent / progress.imgTotal) * 30;
+    const phase2 = progress.deptTotal > 0 ? (progress.deptCurrent / progress.deptTotal) * 70 : 0;
+    return Math.round(Math.min(99, phase1 + phase2)) || 5;
+  })();
 
   const s = {
     wrap: { maxWidth: 960, margin: "0 auto", padding: "1.5rem", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color: "#111" },
@@ -527,11 +550,17 @@ export default function App() {
               <div style={{ width: 28, height: 28, borderRadius: "50%", border: "2.5px solid #eee", borderTopColor: "#0D8A99", animation: "spin 0.8s linear infinite" }} />
               <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
               <div style={{ textAlign: "center" }}>
-                <div style={{ fontSize: 12, color: "#aaa", marginBottom: 4 }}>이미지 {progress.imgCurrent} / {progress.imgTotal} <span style={{ fontSize: 11 }}>{progress.imgLabel}</span></div>
+                {images.length > 1 && (
+                  <div style={{ fontSize: 12, color: "#aaa", marginBottom: 4 }}>이미지 {progress.imgCurrent} / {progress.imgTotal} 진료과 파악 완료</div>
+                )}
                 <div style={{ fontSize: 14, fontWeight: 500 }}>{progress.deptLabel}</div>
-                {progress.deptTotal > 0 && <div style={{ fontSize: 12, color: "#bbb", marginTop: 4 }}>진료과 {progress.deptCurrent} / {progress.deptTotal}</div>}
+                {progress.deptTotal > 0 && (
+                  <div style={{ fontSize: 12, color: "#bbb", marginTop: 4 }}>{progress.deptCurrent} / {progress.deptTotal} 완료</div>
+                )}
               </div>
-              <div style={s.progressBar}><div style={{ height: "100%", width: overallPct + "%", background: "#0D8A99", borderRadius: 99, transition: "width 0.4s ease" }} /></div>
+              <div style={s.progressBar}>
+                <div style={{ height: "100%", width: overallPct + "%", background: "#0D8A99", borderRadius: 99, transition: "width 0.3s ease" }} />
+              </div>
               <div style={{ fontSize: 12, color: "#bbb" }}>전체 진행률 {overallPct}%</div>
             </div>
           )}
