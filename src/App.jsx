@@ -5,7 +5,8 @@ const GEMINI_MODEL = "gemini-2.5-flash";
 const GEMINI_URL = (key) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
 const BUNDLED_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
-const SAVE_KEY = "schedule_saved_data";
+const SAVES_KEY = "schedule_saves_v1";
+const LEGACY_KEY = "schedule_saved_data";
 
 async function callAPI(base64, mediaType, prompt, apiKey, maxTokens = 2000) {
   const res = await fetch(GEMINI_URL(apiKey), {
@@ -16,10 +17,7 @@ async function callAPI(base64, mediaType, prompt, apiKey, maxTokens = 2000) {
         { inline_data: { mime_type: mediaType, data: base64 } },
         { text: prompt },
       ]}],
-      generationConfig: {
-        maxOutputTokens: maxTokens,
-        temperature: 0,
-      },
+      generationConfig: { maxOutputTokens: maxTokens, temperature: 0 },
     }),
   });
   const data = await res.json();
@@ -65,7 +63,7 @@ function makeDeptPrompt(dept) {
 
 ⚠️ 의사 이름 정확도 최우선:
 • 이름의 각 한글 글자를 이미지에서 한 글자씩 정확히 읽으세요.
-• 초성·중성·종성을 각각 확인하세요. 
+• 초성·중성·종성을 각각 확인하세요.
   예) 현(ㅎ+ㅕ+ㄴ) vs 원(ㅇ+ㅝ+ㄴ) — 초성 ㅎ vs ㅇ, 모음 ㅕ vs ㅝ 구분
   예) 환 vs 관 — 초성 확인
   예) 성 vs 생 — 종성 유무 확인
@@ -230,18 +228,50 @@ export default function App() {
   const [dayFilters, setDayFilters] = useState([]);
   const [copied, setCopied] = useState(false);
   const [savedToast, setSavedToast] = useState(false);
-  const [savedInfo, setSavedInfo] = useState(() => {
+
+  /* 저장 목록 (최대 10개) — 이전 단일 저장 포맷 자동 마이그레이션 */
+  const [saves, setSaves] = useState(() => {
     try {
-      const raw = localStorage.getItem(SAVE_KEY);
-      if (!raw) return null;
-      const d = JSON.parse(raw);
-      return { savedAt: d.savedAt, count: d.count, hospitalName: d.hospitalName || "" };
-    } catch { return null; }
+      const raw = localStorage.getItem(SAVES_KEY);
+      if (raw) return JSON.parse(raw);
+      const legacyRaw = localStorage.getItem(LEGACY_KEY);
+      if (legacyRaw) {
+        const old = JSON.parse(legacyRaw);
+        if (old.doctors?.length) {
+          const migrated = [{ id: Date.now(), hospitalName: old.hospitalName || "", doctors: old.doctors, savedAt: old.savedAt || new Date().toISOString(), count: old.count || old.doctors.length }];
+          localStorage.setItem(SAVES_KEY, JSON.stringify(migrated));
+          return migrated;
+        }
+      }
+      return [];
+    } catch { return []; }
   });
+
+  /* 의사 이름 인라인 편집 */
+  const [editingDoctor, setEditingDoctor] = useState(null);
+  const doctorEditRef = useRef();
+  useEffect(() => {
+    if (editingDoctor) doctorEditRef.current?.focus();
+  }, [editingDoctor]);
 
   useEffect(() => {
     if (editingHospital) hospitalInputRef.current?.focus();
   }, [editingHospital]);
+
+  const startEditDoctor = (doc) =>
+    setEditingDoctor({ name: doc.name, department: doc.department, tempName: doc.name || "" });
+
+  const commitEditDoctor = () => {
+    if (!editingDoctor) return;
+    const newName = editingDoctor.tempName.trim();
+    if (newName) {
+      setDoctors(prev => prev.map(d =>
+        d.name === editingDoctor.name && d.department === editingDoctor.department
+          ? { ...d, name: newName } : d
+      ));
+    }
+    setEditingDoctor(null);
+  };
 
   const saveApiKey = () => {
     const key = apiKeyInput.trim();
@@ -269,7 +299,7 @@ export default function App() {
 
   const reset = () => {
     setStage("upload"); setImages([]); setDoctors([]);
-    setHospitalName(""); setEditingHospital(false);
+    setHospitalName(""); setEditingHospital(false); setEditingDoctor(null);
     setSearch(""); setDeptFilters([]); setDayFilters([]);
     setShowRaw(false); setErrorMsg(""); setRawLogs([]);
     setViewMode("table");
@@ -277,38 +307,36 @@ export default function App() {
   };
 
   const saveToLocal = () => {
-    const info = { doctors, hospitalName, savedAt: new Date().toISOString(), count: doctors.length };
-    localStorage.setItem(SAVE_KEY, JSON.stringify(info));
-    setSavedInfo({ savedAt: info.savedAt, count: info.count, hospitalName });
+    const entry = { id: Date.now(), hospitalName, doctors, savedAt: new Date().toISOString(), count: doctors.length };
+    const existingIdx = saves.findIndex(s => s.hospitalName && s.hospitalName === hospitalName && hospitalName !== "");
+    const next = existingIdx >= 0
+      ? saves.map((s, i) => i === existingIdx ? entry : s)
+      : [entry, ...saves].slice(0, 10);
+    localStorage.setItem(SAVES_KEY, JSON.stringify(next));
+    setSaves(next);
     setSavedToast(true);
     setTimeout(() => setSavedToast(false), 1500);
   };
 
-  const loadFromSaved = () => {
-    try {
-      const raw = localStorage.getItem(SAVE_KEY);
-      if (!raw) return;
-      const data = JSON.parse(raw);
-      setDoctors(data.doctors);
-      setHospitalName(data.hospitalName || "");
-      setStage("results");
-    } catch { alert("저장 데이터를 불러오는 데 실패했습니다."); }
+  const loadFromSaved = (entry) => {
+    setDoctors(entry.doctors);
+    setHospitalName(entry.hospitalName || "");
+    setStage("results");
   };
 
-  const deleteSaved = () => {
-    localStorage.removeItem(SAVE_KEY);
-    setSavedInfo(null);
+  const deleteSaved = (id) => {
+    const next = saves.filter(s => s.id !== id);
+    localStorage.setItem(SAVES_KEY, JSON.stringify(next));
+    setSaves(next);
   };
 
   const downloadCSV = () => {
     const rows = [
       ["의사명", "진료과", "외래일정", "진료실", "비고"],
       ...doctors.map(d => [
-        d.name || "",
-        d.department || "",
+        d.name || "", d.department || "",
         (d.schedule||[]).map(s => s.day + (s.period === "PM" ? "오후" : "오전")).join(" "),
-        d.room || "",
-        d.notes || "",
+        d.room || "", d.notes || "",
       ]),
     ];
     const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -316,8 +344,7 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    const namePart = hospitalName ? `_${hospitalName}` : "";
-    a.download = `외래스케줄${namePart}_${new Date().toISOString().slice(0,10)}.csv`;
+    a.download = `외래스케줄${hospitalName ? `_${hospitalName}` : ""}_${new Date().toISOString().slice(0,10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -326,7 +353,6 @@ export default function App() {
     setStage("analyzing"); setRawLogs([]); setHospitalName("");
     const allDoctors = [];
     try {
-      // 1. 병원명 추출 (첫 번째 이미지)
       const firstImg = images[0];
       setProgress({ imgCurrent: 0, imgTotal: images.length, deptLabel: "병원명 파악 중...", deptCurrent: 0, deptTotal: 0 });
       try {
@@ -336,7 +362,6 @@ export default function App() {
         setRawLogs(l => [...l, `[병원명 추출] ${extractedName || "(미확인)"}`]);
       } catch {}
 
-      // 2. 모든 이미지에서 진료과 목록 동시 추출
       setProgress({ imgCurrent: 0, imgTotal: images.length, deptLabel: "진료과 목록 파악 중...", deptCurrent: 0, deptTotal: 0 });
       let deptsDone = 0;
       const imageDepts = await Promise.all(images.map(async (img, imgIdx) => {
@@ -349,11 +374,8 @@ export default function App() {
         return { img, imgIdx, depts };
       }));
 
-      // 3. 모든 진료과의 의사 정보를 4개씩 병렬 추출
       const tasks = [];
-      imageDepts.forEach(({ img, imgIdx, depts }) => {
-        depts.forEach(dept => tasks.push({ img, imgIdx, dept }));
-      });
+      imageDepts.forEach(({ img, imgIdx, depts }) => depts.forEach(dept => tasks.push({ img, imgIdx, dept })));
       if (!tasks.length) throw new Error("진료과 정보를 추출할 수 없었습니다.");
 
       const CONCURRENCY = 4;
@@ -404,7 +426,6 @@ export default function App() {
 
   const toggleDay = (day) => setDayFilters(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]);
 
-  // 진행률: 1단계(진료과 파악) 30% + 2단계(의사 추출) 70%
   const overallPct = (() => {
     if (progress.imgTotal === 0) return 5;
     const phase1 = (progress.imgCurrent / progress.imgTotal) * 30;
@@ -416,7 +437,7 @@ export default function App() {
     wrap: { maxWidth: 960, margin: "0 auto", padding: "1.5rem", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color: "#111" },
     dropZone: { border: `1.5px dashed ${isDragging ? "#16A2B3" : "#ddd"}`, borderRadius: 12, padding: "1.5rem", textAlign: "center", cursor: "pointer", background: isDragging ? "#D9F4F7" : "#fafafa", transition: "all 0.2s" },
     btnPrimary: { display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer", border: "1px solid #0D8A99", background: "#0D8A99", color: "#E8F8FB" },
-    btnGhost: { display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer", border: "0.5px solid #ddd", background: "transparent", color: "#555" },
+    btnGhost: { display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer", border: "0.5px solid #ddd", background: "transparent", color: "#555" },
     btnSm: { display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer", border: "0.5px solid #ddd", background: "transparent", color: "#444" },
     card: { background: "#fff", border: "0.5px solid #ddd", borderRadius: 12, overflow: "hidden" },
     th: { padding: "9px 12px", textAlign: "left", fontSize: 11, fontWeight: 500, color: "#888", borderBottom: "0.5px solid #ddd", background: "#f9f9f9", textTransform: "uppercase", letterSpacing: "0.04em" },
@@ -438,21 +459,10 @@ export default function App() {
     <div style={s.wrap}>
 
       {/* ── 헤더 배너 ── */}
-      <div style={{
-        background: "linear-gradient(135deg, #2CC0D0 0%, #108A9B 100%)",
-        borderRadius: 16,
-        padding: "20px 22px 18px",
-        marginBottom: "1.5rem",
-        position: "relative",
-        overflow: "hidden",
-      }}>
+      <div style={{ background: "linear-gradient(135deg, #2CC0D0 0%, #108A9B 100%)", borderRadius: 16, padding: "20px 22px 18px", marginBottom: "1.5rem", position: "relative", overflow: "hidden" }}>
         <div style={{ position: "absolute", right: -50, top: -50, width: 160, height: 160, borderRadius: "50%", background: "rgba(255,255,255,0.07)", pointerEvents: "none" }} />
         <div style={{ position: "absolute", right: 40, bottom: -30, width: 100, height: 100, borderRadius: "50%", background: "rgba(255,255,255,0.05)", pointerEvents: "none" }} />
-
-        <div style={{ position: "absolute", top: 14, right: 14, background: "rgba(0,0,0,0.28)", color: "#fff", fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 20, letterSpacing: "0.06em" }}>
-          시간표
-        </div>
-
+        <div style={{ position: "absolute", top: 14, right: 14, background: "rgba(0,0,0,0.28)", color: "#fff", fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 20, letterSpacing: "0.06em" }}>시간표</div>
         <div style={{ marginBottom: 10 }}>
           <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
             <rect x="18" y="14" width="22" height="26" rx="4" fill="rgba(255,200,230,0.28)" stroke="rgba(255,255,255,0.28)" strokeWidth="1.5"/>
@@ -461,15 +471,10 @@ export default function App() {
             <path d="M19 13v10M14 18h10" stroke="rgba(235,70,80,0.92)" strokeWidth="3" strokeLinecap="round"/>
           </svg>
         </div>
-
         <div style={{ color: "#fff", fontSize: 20, fontWeight: 700, letterSpacing: "-0.3px" }}>Hospital TimeTable</div>
-        <div style={{ color: "rgba(255,255,255,0.72)", fontSize: 12, marginTop: 3 }}>
-          병원 진료 일정과 시간표를 한눈에 정리·관리할 수 있는 스케줄 뷰어입니다
-        </div>
-
+        <div style={{ color: "rgba(255,255,255,0.72)", fontSize: 12, marginTop: 3 }}>병원 진료 일정과 시간표를 한눈에 정리·관리할 수 있는 스케줄 뷰어입니다</div>
         {!BUNDLED_API_KEY && apiKey && (
-          <button
-            style={{ marginTop: 12, padding: "5px 10px", borderRadius: 8, fontSize: 11, cursor: "pointer", border: "0.5px solid rgba(255,255,255,0.35)", background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.88)", display: "inline-flex", alignItems: "center", gap: 5 }}
+          <button style={{ marginTop: 12, padding: "5px 10px", borderRadius: 8, fontSize: 11, cursor: "pointer", border: "0.5px solid rgba(255,255,255,0.35)", background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.88)", display: "inline-flex", alignItems: "center", gap: 5 }}
             onClick={() => { localStorage.removeItem("gemini_api_key"); setApiKey(""); setShowApiKeySetup(true); }}>
             🔑 API키 변경
           </button>
@@ -480,9 +485,7 @@ export default function App() {
         <div style={s.apiKeyBox}>
           <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>🔑 Google Gemini API 키 설정</div>
           <div style={{ fontSize: 12, color: "#888", marginBottom: 4 }}>Gemini API는 <strong>무료</strong>로 사용 가능합니다.</div>
-          <div style={{ fontSize: 12, color: "#0D8A99", marginBottom: 12 }}>
-            키 발급: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color: "#0D8A99" }}>aistudio.google.com/apikey</a> → "Get API key"
-          </div>
+          <div style={{ fontSize: 12, color: "#0D8A99", marginBottom: 12 }}>키 발급: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color: "#0D8A99" }}>aistudio.google.com/apikey</a> → "Get API key"</div>
           <div style={{ display: "flex", gap: 8 }}>
             <input style={s.apiKeyInput} type="password" placeholder="AIzaSy..." value={apiKeyInput}
               onChange={e => setApiKeyInput(e.target.value)} onKeyDown={e => e.key === "Enter" && saveApiKey()} />
@@ -507,19 +510,29 @@ export default function App() {
                 <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={e => addFiles(e.target.files)} />
               </div>
 
-              {savedInfo && stage === "upload" && (
-                <div style={{ marginTop: 12, padding: "12px 16px", background: "#f9f9f9", border: "0.5px solid #e0e0e0", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: "#333" }}>💾 저장된 분석 결과</div>
-                    <div style={{ fontSize: 11, color: "#aaa", marginTop: 2 }}>
-                      {savedInfo.hospitalName && <span style={{ marginRight: 6, color: "#555" }}>{savedInfo.hospitalName} ·</span>}
-                      {savedInfo.count}명 · {new Date(savedInfo.savedAt).toLocaleString("ko-KR")}
+              {/* ── 저장된 병원 목록 ── */}
+              {saves.length > 0 && stage === "upload" && (
+                <div style={{ marginTop: 12, border: "0.5px solid #e0e0e0", borderRadius: 10, overflow: "hidden", background: "#fff" }}>
+                  <div style={{ padding: "10px 16px", background: "#f9f9f9", borderBottom: "0.5px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: "#555" }}>💾 저장된 분석 결과</span>
+                    <span style={{ fontSize: 11, color: "#bbb" }}>{saves.length} / 10</span>
+                  </div>
+                  {saves.map(entry => (
+                    <div key={entry.id} style={{ padding: "10px 16px", borderBottom: "0.5px solid #f5f5f5", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: "#222", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {entry.hospitalName || "병원명 없음"}
+                        </div>
+                        <div style={{ fontSize: 11, color: "#aaa", marginTop: 2 }}>
+                          {entry.count}명 · {new Date(entry.savedAt).toLocaleString("ko-KR")}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                        <button style={s.btnGhost} onClick={() => loadFromSaved(entry)}>불러오기</button>
+                        <button style={{ ...s.btnSm, color: "#ccc", fontSize: 11 }} onClick={() => deleteSaved(entry.id)}>삭제</button>
+                      </div>
                     </div>
-                  </div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button style={s.btnGhost} onClick={loadFromSaved}>불러오기</button>
-                    <button style={{ ...s.btnSm, color: "#ccc", fontSize: 11 }} onClick={deleteSaved}>삭제</button>
-                  </div>
+                  ))}
                 </div>
               )}
 
@@ -550,17 +563,11 @@ export default function App() {
               <div style={{ width: 28, height: 28, borderRadius: "50%", border: "2.5px solid #eee", borderTopColor: "#0D8A99", animation: "spin 0.8s linear infinite" }} />
               <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
               <div style={{ textAlign: "center" }}>
-                {images.length > 1 && (
-                  <div style={{ fontSize: 12, color: "#aaa", marginBottom: 4 }}>이미지 {progress.imgCurrent} / {progress.imgTotal} 진료과 파악 완료</div>
-                )}
+                {images.length > 1 && <div style={{ fontSize: 12, color: "#aaa", marginBottom: 4 }}>이미지 {progress.imgCurrent} / {progress.imgTotal} 진료과 파악 완료</div>}
                 <div style={{ fontSize: 14, fontWeight: 500 }}>{progress.deptLabel}</div>
-                {progress.deptTotal > 0 && (
-                  <div style={{ fontSize: 12, color: "#bbb", marginTop: 4 }}>{progress.deptCurrent} / {progress.deptTotal} 완료</div>
-                )}
+                {progress.deptTotal > 0 && <div style={{ fontSize: 12, color: "#bbb", marginTop: 4 }}>{progress.deptCurrent} / {progress.deptTotal} 완료</div>}
               </div>
-              <div style={s.progressBar}>
-                <div style={{ height: "100%", width: overallPct + "%", background: "#0D8A99", borderRadius: 99, transition: "width 0.3s ease" }} />
-              </div>
+              <div style={s.progressBar}><div style={{ height: "100%", width: overallPct + "%", background: "#0D8A99", borderRadius: 99, transition: "width 0.3s ease" }} /></div>
               <div style={{ fontSize: 12, color: "#bbb" }}>전체 진행률 {overallPct}%</div>
             </div>
           )}
@@ -586,9 +593,7 @@ export default function App() {
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ fontSize: 11, color: "#aaa", flexShrink: 0 }}>병원명</span>
                   {editingHospital ? (
-                    <input
-                      ref={hospitalInputRef}
-                      value={hospitalName}
+                    <input ref={hospitalInputRef} value={hospitalName}
                       onChange={e => setHospitalName(e.target.value)}
                       onBlur={() => setEditingHospital(false)}
                       onKeyDown={e => { if (e.key === "Enter" || e.key === "Escape") setEditingHospital(false); }}
@@ -596,10 +601,8 @@ export default function App() {
                       style={{ fontSize: 13, fontWeight: 500, border: "0.5px solid #0D8A99", borderRadius: 6, padding: "3px 8px", outline: "none", color: "#111", background: "#f5fdfe", minWidth: 160 }}
                     />
                   ) : (
-                    <button
-                      onClick={() => setEditingHospital(true)}
-                      style={{ fontSize: 13, fontWeight: 500, color: hospitalName ? "#111" : "#bbb", background: "transparent", border: "0.5px solid transparent", borderRadius: 6, padding: "3px 8px", cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}
-                    >
+                    <button onClick={() => setEditingHospital(true)}
+                      style={{ fontSize: 13, fontWeight: 500, color: hospitalName ? "#111" : "#bbb", background: "transparent", border: "0.5px solid transparent", borderRadius: 6, padding: "3px 8px", cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
                       {hospitalName || "병원명 클릭하여 수정"}
                       <span style={{ fontSize: 11, color: "#bbb" }}>✎</span>
                     </button>
@@ -649,23 +652,43 @@ export default function App() {
               {viewMode === "table" && (
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-                    <colgroup><col style={{ width: 100 }}/><col style={{ width: 110 }}/><col style={{ width: 200 }}/><col style={{ width: 70 }}/><col /></colgroup>
+                    <colgroup><col style={{ width: 110 }}/><col style={{ width: 110 }}/><col style={{ width: 200 }}/><col style={{ width: 70 }}/><col /></colgroup>
                     <thead><tr>{["의사명","진료과","외래 일정","진료실","비고"].map(h => <th key={h} style={s.th}>{h}</th>)}</tr></thead>
                     <tbody>
                       {filtered.length === 0
                         ? <tr><td colSpan={5} style={{ ...s.td, textAlign: "center", color: "#bbb", padding: "2rem" }}>검색 결과가 없습니다</td></tr>
-                        : filtered.map((d, i) => (
-                          <tr key={i}>
-                            <td style={s.td}><span style={{ fontWeight: 500 }}>{d.name||"-"}</span></td>
-                            <td style={s.td}><span style={s.deptBadge}>{d.department||"-"}</span></td>
-                            <td style={s.td}>{!(d.schedule||[]).length
-                              ? <span style={{ color: "#bbb", fontSize: 12 }}>정보 없음</span>
-                              : (d.schedule||[]).map((sc, j) => <span key={j} style={sc.period === "PM" ? s.pillPM : s.pillAM}>{sc.day} {sc.period === "PM" ? "오후" : "오전"}</span>)
-                            }</td>
-                            <td style={{ ...s.td, fontFamily: "monospace", fontSize: 12 }}>{d.room||"-"}</td>
-                            <td style={{ ...s.td, fontSize: 12, color: "#666" }}>{d.notes||"-"}</td>
-                          </tr>
-                        ))
+                        : filtered.map((d, i) => {
+                          const isEditing = editingDoctor?.name === d.name && editingDoctor?.department === d.department;
+                          return (
+                            <tr key={i}>
+                              <td style={s.td}>
+                                {isEditing ? (
+                                  <input
+                                    ref={doctorEditRef}
+                                    value={editingDoctor.tempName}
+                                    onChange={e => setEditingDoctor(prev => ({ ...prev, tempName: e.target.value }))}
+                                    onBlur={commitEditDoctor}
+                                    onKeyDown={e => { if (e.key === "Enter") commitEditDoctor(); if (e.key === "Escape") setEditingDoctor(null); }}
+                                    style={{ fontSize: 13, fontWeight: 500, border: "0.5px solid #0D8A99", borderRadius: 6, padding: "3px 6px", outline: "none", color: "#111", background: "#f5fdfe", width: "100%", boxSizing: "border-box" }}
+                                  />
+                                ) : (
+                                  <button onClick={() => startEditDoctor(d)}
+                                    style={{ fontWeight: 500, background: "transparent", border: "0.5px solid transparent", borderRadius: 6, padding: "2px 4px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 13, color: "#111", width: "100%" }}>
+                                    {d.name || "-"}
+                                    <span style={{ fontSize: 10, color: "#ccc", flexShrink: 0 }}>✎</span>
+                                  </button>
+                                )}
+                              </td>
+                              <td style={s.td}><span style={s.deptBadge}>{d.department||"-"}</span></td>
+                              <td style={s.td}>{!(d.schedule||[]).length
+                                ? <span style={{ color: "#bbb", fontSize: 12 }}>정보 없음</span>
+                                : (d.schedule||[]).map((sc, j) => <span key={j} style={sc.period === "PM" ? s.pillPM : s.pillAM}>{sc.day} {sc.period === "PM" ? "오후" : "오전"}</span>)
+                              }</td>
+                              <td style={{ ...s.td, fontFamily: "monospace", fontSize: 12 }}>{d.room||"-"}</td>
+                              <td style={{ ...s.td, fontSize: 12, color: "#666" }}>{d.notes||"-"}</td>
+                            </tr>
+                          );
+                        })
                       }
                     </tbody>
                   </table>
