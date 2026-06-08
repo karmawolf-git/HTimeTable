@@ -66,10 +66,10 @@ function makeDeptPrompt(dept) {
 ⚠️ 의사 이름 정확도 최우선:
 • 이름의 각 한글 글자를 이미지에서 한 글자씩 정확히 읽으세요.
 • 초성·중성·종성을 각각 확인하세요. 
-  예) 현(■ㅇ+■ㅓ+■ㄴ) vs 원(■ㅇ+■ㅓ+■ㄴ 종성없음) — 종성 ㄴ 유무로 구분
-  예) 환 vs 관 — 중성 확인
+  예) 현(ㅎ+ㅕ+ㄴ) vs 원(ㅇ+ㅝ+ㄴ) — 초성 ㅎ vs ㅇ, 모음 ㅕ vs ㅝ 구분
+  예) 환 vs 관 — 초성 확인
   예) 성 vs 생 — 종성 유무 확인
-• 쫐측하지 말고 이미지에 보이는 글자 그대로 입력하세요.
+• 추측하지 말고 이미지에 보이는 글자 그대로 입력하세요.
 • 이름 쓰기가 애매하면 이미지를 다시 한 번 자세히 살펴보세요.
 
 형식: 이름|일정목록|진료실|비고
@@ -119,17 +119,17 @@ function DeptDropdown({ allDepts, selected, onChange }) {
   const label = selected.length === 0 ? "전체 진료과" : `진료과 ${selected.length}개선택`;
   return (
     <div ref={ref} style={{ position: "relative", flexShrink: 0 }}>
-      <button onClick={() => setOpen(o => !o)} style={{ padding: "6px 10px", fontSize: 13, border: "0.5px solid #ddd", borderRadius: 8, background: selected.length ? "#E1F5EE" : "#f9f9f9", color: selected.length ? "#085041" : "#222", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+      <button onClick={() => setOpen(o => !o)} style={{ padding: "6px 10px", fontSize: 13, border: "0.5px solid #ddd", borderRadius: 8, background: selected.length ? "#D9F4F7" : "#f9f9f9", color: selected.length ? "#076478" : "#222", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
         {label} <span style={{ fontSize: 10 }}>{open ? "▲" : "▼"}</span>
       </button>
       {open && (
         <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, background: "#fff", border: "0.5px solid #ddd", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.1)", zIndex: 200, minWidth: 160, maxHeight: 260, overflowY: "auto", padding: "4px 0" }}>
           {selected.length > 0 && (
-            <button onClick={() => onChange([])} style={{ width: "100%", textAlign: "left", padding: "7px 12px", fontSize: 12, color: "#0F6E56", background: "none", border: "none", borderBottom: "0.5px solid #f0f0f0", cursor: "pointer", fontWeight: 500 }}>✕ 선택 해제</button>
+            <button onClick={() => onChange([])} style={{ width: "100%", textAlign: "left", padding: "7px 12px", fontSize: 12, color: "#0D8A99", background: "none", border: "none", borderBottom: "0.5px solid #f0f0f0", cursor: "pointer", fontWeight: 500 }}>✕ 선택 해제</button>
           )}
           {allDepts.map(d => (
-            <label key={d} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", cursor: "pointer", fontSize: 13, color: selected.includes(d) ? "#085041" : "#333", background: selected.includes(d) ? "#f0faf5" : "transparent" }}>
-              <input type="checkbox" checked={selected.includes(d)} onChange={() => toggle(d)} style={{ accentColor: "#0F6E56", flexShrink: 0 }} />
+            <label key={d} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", cursor: "pointer", fontSize: 13, color: selected.includes(d) ? "#076478" : "#333", background: selected.includes(d) ? "#E5F7FA" : "transparent" }}>
+              <input type="checkbox" checked={selected.includes(d)} onChange={() => toggle(d)} style={{ accentColor: "#0D8A99", flexShrink: 0 }} />
               {d}
             </label>
           ))}
@@ -177,17 +177,17 @@ function DayView({ doctors, search, deptFilters, dayFilters }) {
         <tbody>
           {["AM", "PM"].map(period => (
             <tr key={period} style={{ verticalAlign: "top" }}>
-              <td style={{ padding: "10px 4px", textAlign: "center", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", borderBottom: "0.5px solid #eee", borderRight: "0.5px solid #ddd", color: period === "AM" ? "#085041" : "#633806", background: period === "AM" ? "#f0faf5" : "#fef9f0" }}>
+              <td style={{ padding: "10px 4px", textAlign: "center", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", borderBottom: "0.5px solid #eee", borderRight: "0.5px solid #ddd", color: period === "AM" ? "#076478" : "#633806", background: period === "AM" ? "#E5F7FA" : "#fef9f0" }}>
                 {period === "AM" ? "오전" : "오후"}
               </td>
               {activeDays.map(day => {
                 const list = matrix[`${day}_${period}`];
                 return (
-                  <td key={day} style={{ padding: "6px 8px", verticalAlign: "top", borderBottom: "0.5px solid #f0f0f0", borderLeft: "0.5px solid #f0f0f0", background: list.length ? (period === "AM" ? "#fafffe" : "#fffdf8") : "transparent", minWidth: 90 }}>
+                  <td key={day} style={{ padding: "6px 8px", verticalAlign: "top", borderBottom: "0.5px solid #f0f0f0", borderLeft: "0.5px solid #f0f0f0", background: list.length ? (period === "AM" ? "#F3FCFD" : "#fffdf8") : "transparent", minWidth: 90 }}>
                     {list.length === 0
                       ? <span style={{ color: "#e0e0e0", fontSize: 12, display: "block", textAlign: "center", paddingTop: 6 }}>—</span>
                       : list.map((d, i) => (
-                        <div key={i} style={{ marginBottom: 4, padding: "4px 6px", borderRadius: 6, background: period === "AM" ? "#E1F5EE" : "#FAEEDA", border: `0.5px solid ${period === "AM" ? "#9FE1CB" : "#FAC775"}` }}>
+                        <div key={i} style={{ marginBottom: 4, padding: "4px 6px", borderRadius: 6, background: period === "AM" ? "#D9F4F7" : "#FAEEDA", border: `0.5px solid ${period === "AM" ? "#77CED9" : "#FAC775"}` }}>
                           <div style={{ fontSize: 12, fontWeight: 600, color: "#111", lineHeight: 1.3 }}>{d.name}</div>
                           <div style={{ fontSize: 10, color: "#888", marginTop: 1 }}>{d.department}{d.room ? ` · ${d.room}호` : ""}</div>
                         </div>
@@ -332,7 +332,7 @@ export default function App() {
         const nameRaw = await callAPI(firstImg.base64, firstImg.mediaType, PROMPT_HOSPITAL, apiKey, 100);
         const extractedName = nameRaw.trim().split("\n")[0].trim();
         if (extractedName) setHospitalName(extractedName);
-        setRawLogs(l => [...l, `[병원명 추출] ${extractedName || "(미확인)"}`]);
+        setRawLogs(l => [...l, `[병원명 추출] ${extractedName || "(미확인)"}` ]);
       } catch {}
 
       for (let imgIdx = 0; imgIdx < images.length; imgIdx++) {
@@ -391,19 +391,17 @@ export default function App() {
 
   const s = {
     wrap: { maxWidth: 960, margin: "0 auto", padding: "1.5rem", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color: "#111" },
-    header: { display: "flex", alignItems: "center", gap: 12, marginBottom: "1.5rem", paddingBottom: "1rem", borderBottom: "0.5px solid #eee" },
-    iconBox: { width: 36, height: 36, background: "#0F6E56", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-    dropZone: { border: `1.5px dashed ${isDragging ? "#1D9E75" : "#ddd"}`, borderRadius: 12, padding: "1.5rem", textAlign: "center", cursor: "pointer", background: isDragging ? "#E1F5EE" : "#fafafa", transition: "all 0.2s" },
-    btnPrimary: { display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer", border: "1px solid #0F6E56", background: "#0F6E56", color: "#E1F5EE" },
+    dropZone: { border: `1.5px dashed ${isDragging ? "#16A2B3" : "#ddd"}`, borderRadius: 12, padding: "1.5rem", textAlign: "center", cursor: "pointer", background: isDragging ? "#D9F4F7" : "#fafafa", transition: "all 0.2s" },
+    btnPrimary: { display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer", border: "1px solid #0D8A99", background: "#0D8A99", color: "#E8F8FB" },
     btnGhost: { display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer", border: "0.5px solid #ddd", background: "transparent", color: "#555" },
     btnSm: { display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer", border: "0.5px solid #ddd", background: "transparent", color: "#444" },
     card: { background: "#fff", border: "0.5px solid #ddd", borderRadius: 12, overflow: "hidden" },
     th: { padding: "9px 12px", textAlign: "left", fontSize: 11, fontWeight: 500, color: "#888", borderBottom: "0.5px solid #ddd", background: "#f9f9f9", textTransform: "uppercase", letterSpacing: "0.04em" },
     td: { padding: "10px 12px", borderBottom: "0.5px solid #f5f5f5", color: "#222", verticalAlign: "top", wordBreak: "keep-all", fontSize: 13 },
-    pillAM: { display: "inline-block", margin: "2px 2px 2px 0", padding: "2px 7px", borderRadius: 4, fontSize: 11, background: "#E1F5EE", color: "#085041", border: "0.5px solid #9FE1CB" },
+    pillAM: { display: "inline-block", margin: "2px 2px 2px 0", padding: "2px 7px", borderRadius: 4, fontSize: 11, background: "#D9F4F7", color: "#076478", border: "0.5px solid #77CED9" },
     pillPM: { display: "inline-block", margin: "2px 2px 2px 0", padding: "2px 7px", borderRadius: 4, fontSize: 11, background: "#FAEEDA", color: "#633806", border: "0.5px solid #FAC775" },
     deptBadge: { display: "inline-block", padding: "2px 7px", borderRadius: 4, fontSize: 11, background: "#f4f4f4", border: "0.5px solid #ddd", color: "#666" },
-    countBadge: { display: "inline-flex", alignItems: "center", padding: "2px 8px", borderRadius: 20, fontSize: 11, fontWeight: 500, background: "#9FE1CB", color: "#085041" },
+    countBadge: { display: "inline-flex", alignItems: "center", padding: "2px 8px", borderRadius: 20, fontSize: 11, fontWeight: 500, background: "#77CED9", color: "#076478" },
     filterInput: { flex: 1, minWidth: 140, padding: "6px 10px", fontSize: 13, border: "0.5px solid #ddd", borderRadius: 8, background: "#f9f9f9", color: "#222", outline: "none" },
     errorBox: { padding: "14px 16px", background: "#FCEBEB", border: "0.5px solid #F7C1C1", borderRadius: 12, color: "#791F1F", fontSize: 13 },
     rawBox: { marginTop: 8, padding: 10, background: "#f9f9f9", borderRadius: 8, fontSize: 11, color: "#888", lineHeight: 1.7, whiteSpace: "pre-wrap", maxHeight: 280, overflowY: "auto" },
@@ -415,19 +413,40 @@ export default function App() {
 
   return (
     <div style={s.wrap}>
-      <div style={s.header}>
-        <div style={s.iconBox}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#E1F5EE" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"/>
-            <path d="M8 15v1a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6v-4"/><circle cx="20" cy="10" r="2"/>
+
+      {/* ── 헤더 배너 ── */}
+      <div style={{
+        background: "linear-gradient(135deg, #2CC0D0 0%, #108A9B 100%)",
+        borderRadius: 16,
+        padding: "20px 22px 18px",
+        marginBottom: "1.5rem",
+        position: "relative",
+        overflow: "hidden",
+      }}>
+        <div style={{ position: "absolute", right: -50, top: -50, width: 160, height: 160, borderRadius: "50%", background: "rgba(255,255,255,0.07)", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", right: 40, bottom: -30, width: 100, height: 100, borderRadius: "50%", background: "rgba(255,255,255,0.05)", pointerEvents: "none" }} />
+
+        <div style={{ position: "absolute", top: 14, right: 14, background: "rgba(0,0,0,0.28)", color: "#fff", fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 20, letterSpacing: "0.06em" }}>
+          시간표
+        </div>
+
+        <div style={{ marginBottom: 10 }}>
+          <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+            <rect x="18" y="14" width="22" height="26" rx="4" fill="rgba(255,200,230,0.28)" stroke="rgba(255,255,255,0.28)" strokeWidth="1.5"/>
+            <rect x="13" y="9" width="22" height="26" rx="4" fill="rgba(200,150,230,0.42)" stroke="rgba(255,255,255,0.42)" strokeWidth="1.5"/>
+            <rect x="8" y="4" width="22" height="26" rx="4" fill="rgba(230,185,250,0.62)" stroke="rgba(255,255,255,0.65)" strokeWidth="1.5"/>
+            <path d="M19 13v10M14 18h10" stroke="rgba(235,70,80,0.92)" strokeWidth="3" strokeLinecap="round"/>
           </svg>
         </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 16, fontWeight: 500 }}>병원 스케줄 분석 에이전트</div>
-          <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>외래 스케줄 사진 → 전체 의사 자동 추출 · MR 전용</div>
+
+        <div style={{ color: "#fff", fontSize: 20, fontWeight: 700, letterSpacing: "-0.3px" }}>Hospital TimeTable</div>
+        <div style={{ color: "rgba(255,255,255,0.72)", fontSize: 12, marginTop: 3 }}>
+          병원 진료 일정과 시간표를 한눈에 정리·관리할 수 있는 스케줄 뷰어입니다
         </div>
+
         {!BUNDLED_API_KEY && apiKey && (
-          <button style={{ ...s.btnSm, fontSize: 11, color: "#aaa" }}
+          <button
+            style={{ marginTop: 12, padding: "5px 10px", borderRadius: 8, fontSize: 11, cursor: "pointer", border: "0.5px solid rgba(255,255,255,0.35)", background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.88)", display: "inline-flex", alignItems: "center", gap: 5 }}
             onClick={() => { localStorage.removeItem("gemini_api_key"); setApiKey(""); setShowApiKeySetup(true); }}>
             🔑 API키 변경
           </button>
@@ -438,8 +457,8 @@ export default function App() {
         <div style={s.apiKeyBox}>
           <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>🔑 Google Gemini API 키 설정</div>
           <div style={{ fontSize: 12, color: "#888", marginBottom: 4 }}>Gemini API는 <strong>무료</strong>로 사용 가능합니다.</div>
-          <div style={{ fontSize: 12, color: "#0F6E56", marginBottom: 12 }}>
-            키 발급: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color: "#0F6E56" }}>aistudio.google.com/apikey</a> → "Get API key"
+          <div style={{ fontSize: 12, color: "#0D8A99", marginBottom: 12 }}>
+            키 발급: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color: "#0D8A99" }}>aistudio.google.com/apikey</a> → "Get API key"
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <input style={s.apiKeyInput} type="password" placeholder="AIzaSy..." value={apiKeyInput}
@@ -457,10 +476,10 @@ export default function App() {
                 onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
                 onDragLeave={() => setIsDragging(false)}
                 onDrop={e => { e.preventDefault(); setIsDragging(false); addFiles(e.dataTransfer.files); }}>
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={isDragging ? "#0F6E56" : "#bbb"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: "0 auto 8px", display: "block" }}>
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={isDragging ? "#0D8A99" : "#bbb"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: "0 auto 8px", display: "block" }}>
                   <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>
                 </svg>
-                <div style={{ fontSize: 13, color: "#666" }}><strong style={{ color: "#0F6E56" }}>클릭하거나 끌어다 놓아</strong> 사진 추가</div>
+                <div style={{ fontSize: 13, color: "#666" }}><strong style={{ color: "#0D8A99" }}>클릭하거나 끌어다 놓아</strong> 사진 추가</div>
                 <div style={{ fontSize: 11, color: "#bbb", marginTop: 4 }}>여러 장 동시 선택 가능 · JPG / PNG / WEBP</div>
                 <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={e => addFiles(e.target.files)} />
               </div>
@@ -505,14 +524,14 @@ export default function App() {
 
           {stage === "analyzing" && (
             <div style={s.progressCard}>
-              <div style={{ width: 28, height: 28, borderRadius: "50%", border: "2.5px solid #eee", borderTopColor: "#0F6E56", animation: "spin 0.8s linear infinite" }} />
+              <div style={{ width: 28, height: 28, borderRadius: "50%", border: "2.5px solid #eee", borderTopColor: "#0D8A99", animation: "spin 0.8s linear infinite" }} />
               <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
               <div style={{ textAlign: "center" }}>
                 <div style={{ fontSize: 12, color: "#aaa", marginBottom: 4 }}>이미지 {progress.imgCurrent} / {progress.imgTotal} <span style={{ fontSize: 11 }}>{progress.imgLabel}</span></div>
                 <div style={{ fontSize: 14, fontWeight: 500 }}>{progress.deptLabel}</div>
                 {progress.deptTotal > 0 && <div style={{ fontSize: 12, color: "#bbb", marginTop: 4 }}>진료과 {progress.deptCurrent} / {progress.deptTotal}</div>}
               </div>
-              <div style={s.progressBar}><div style={{ height: "100%", width: overallPct + "%", background: "#0F6E56", borderRadius: 99, transition: "width 0.4s ease" }} /></div>
+              <div style={s.progressBar}><div style={{ height: "100%", width: overallPct + "%", background: "#0D8A99", borderRadius: 99, transition: "width 0.4s ease" }} /></div>
               <div style={{ fontSize: 12, color: "#bbb" }}>전체 진행률 {overallPct}%</div>
             </div>
           )}
@@ -545,7 +564,7 @@ export default function App() {
                       onBlur={() => setEditingHospital(false)}
                       onKeyDown={e => { if (e.key === "Enter" || e.key === "Escape") setEditingHospital(false); }}
                       placeholder="병원명 입력..."
-                      style={{ fontSize: 13, fontWeight: 500, border: "0.5px solid #0F6E56", borderRadius: 6, padding: "3px 8px", outline: "none", color: "#111", background: "#f9fff9", minWidth: 160 }}
+                      style={{ fontSize: 13, fontWeight: 500, border: "0.5px solid #0D8A99", borderRadius: 6, padding: "3px 8px", outline: "none", color: "#111", background: "#f5fdfe", minWidth: 160 }}
                     />
                   ) : (
                     <button
@@ -587,7 +606,7 @@ export default function App() {
                   {ALL_DAYS.map(day => {
                     const active = dayFilters.includes(day);
                     return (
-                      <button key={day} onClick={() => toggleDay(day)} style={{ padding: "4px 10px", borderRadius: 6, border: `0.5px solid ${active ? "#0F6E56" : "#ddd"}`, background: active ? "#E1F5EE" : "transparent", color: active ? "#085041" : "#666", fontSize: 12, cursor: "pointer", fontWeight: active ? 600 : 400, transition: "all 0.12s" }}>
+                      <button key={day} onClick={() => toggleDay(day)} style={{ padding: "4px 10px", borderRadius: 6, border: `0.5px solid ${active ? "#0D8A99" : "#ddd"}`, background: active ? "#D9F4F7" : "transparent", color: active ? "#076478" : "#666", fontSize: 12, cursor: "pointer", fontWeight: active ? 600 : 400, transition: "all 0.12s" }}>
                         {day}
                       </button>
                     );
