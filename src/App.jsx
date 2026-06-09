@@ -41,20 +41,22 @@ const PROMPT_HOSPITAL = `이 이미지는 병원 외래 스케줄 표입니다.
 병원명을 헤더, 로고 주변 텍스트에서 찾으세요.
 찾을 수 없다면 아무것도 출력하지 마세요.`;
 
+// 할루시네이션 방지: 이미지에 없는 진료과를 만들어내지 않도록 명시
 const PROMPT_DEPTS = `이 이미지는 병원 외래 스케줄 표입니다.
-스케줄 표 전체를 꼼꼼히 살펴서 모든 진료과를 반드시 전부 빠짐없이 추출하세요.
-일부만 나열하지 말고, 이미지에 보이는 모든 진료과를 나열하세요.
-진료과 이름만 줄바꿈으로 구분해서 출력하고, 번호나 다른 설명은 일절 출력하지 마세요.
+이미지에 실제로 표시된 진료과명만 추출하세요.
 
-예시:
-감염내과
+⚠️ 반드시 지켜야 할 규칙:
+• 이미지를 직접 읽어서 눈으로 확인되는 진료과명만 나열하세요
+• 병원에 일반적으로 있직한 진료과 목록을 교육지식으로 추가하지 마세요
+• 이미지에 없는 진료과를 절대 지어내지 마세요
+• 텍스트가 불분명하면 그 항목은 건너뜌세요
+• 진료과 이름만 줄바꿈으로 구분해서 출력하세요
+• 번호, 설명, 부연은 일절 출력하지 마세요
+
+예시 (이미지에 실제로 있을 때만):
 내분비내과
 류마티스내과
-비뇨의학과
-심장내과
-호흡기내과
-헤마토로지과
-소화기내과`;
+비뇨의학과`;
 
 function makeDeptPrompt(dept) {
   return `이 이미지는 병원 외래 스케줄 표입니다.
@@ -229,7 +231,6 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const [savedToast, setSavedToast] = useState(false);
 
-  /* 저장 목록 (최대 10개) — 이전 단일 저장 포맷 자동 마이그레이션 */
   const [saves, setSaves] = useState(() => {
     try {
       const raw = localStorage.getItem(SAVES_KEY);
@@ -247,16 +248,10 @@ export default function App() {
     } catch { return []; }
   });
 
-  /* 의사 이름 인라인 편집 */
   const [editingDoctor, setEditingDoctor] = useState(null);
   const doctorEditRef = useRef();
-  useEffect(() => {
-    if (editingDoctor) doctorEditRef.current?.focus();
-  }, [editingDoctor]);
-
-  useEffect(() => {
-    if (editingHospital) hospitalInputRef.current?.focus();
-  }, [editingHospital]);
+  useEffect(() => { if (editingDoctor) doctorEditRef.current?.focus(); }, [editingDoctor]);
+  useEffect(() => { if (editingHospital) hospitalInputRef.current?.focus(); }, [editingHospital]);
 
   const startEditDoctor = (doc) =>
     setEditingDoctor({ name: doc.name, department: doc.department, tempName: doc.name || "" });
@@ -318,11 +313,7 @@ export default function App() {
     setTimeout(() => setSavedToast(false), 1500);
   };
 
-  const loadFromSaved = (entry) => {
-    setDoctors(entry.doctors);
-    setHospitalName(entry.hospitalName || "");
-    setStage("results");
-  };
+  const loadFromSaved = (entry) => { setDoctors(entry.doctors); setHospitalName(entry.hospitalName || ""); setStage("results"); };
 
   const deleteSaved = (id) => {
     const next = saves.filter(s => s.id !== id);
@@ -457,8 +448,6 @@ export default function App() {
 
   return (
     <div style={s.wrap}>
-
-      {/* ── 헤더 배너 ── */}
       <div style={{ background: "linear-gradient(135deg, #2CC0D0 0%, #108A9B 100%)", borderRadius: 16, padding: "20px 22px 18px", marginBottom: "1.5rem", position: "relative", overflow: "hidden" }}>
         <div style={{ position: "absolute", right: -50, top: -50, width: 160, height: 160, borderRadius: "50%", background: "rgba(255,255,255,0.07)", pointerEvents: "none" }} />
         <div style={{ position: "absolute", right: 40, bottom: -30, width: 100, height: 100, borderRadius: "50%", background: "rgba(255,255,255,0.05)", pointerEvents: "none" }} />
@@ -510,7 +499,6 @@ export default function App() {
                 <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={e => addFiles(e.target.files)} />
               </div>
 
-              {/* ── 저장된 병원 목록 ── */}
               {saves.length > 0 && stage === "upload" && (
                 <div style={{ marginTop: 12, border: "0.5px solid #e0e0e0", borderRadius: 10, overflow: "hidden", background: "#fff" }}>
                   <div style={{ padding: "10px 16px", background: "#f9f9f9", borderBottom: "0.5px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -520,12 +508,8 @@ export default function App() {
                   {saves.map(entry => (
                     <div key={entry.id} style={{ padding: "10px 16px", borderBottom: "0.5px solid #f5f5f5", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 500, color: "#222", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {entry.hospitalName || "병원명 없음"}
-                        </div>
-                        <div style={{ fontSize: 11, color: "#aaa", marginTop: 2 }}>
-                          {entry.count}명 · {new Date(entry.savedAt).toLocaleString("ko-KR")}
-                        </div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: "#222", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.hospitalName || "병원명 없음"}</div>
+                        <div style={{ fontSize: 11, color: "#aaa", marginTop: 2 }}>{entry.count}명 · {new Date(entry.savedAt).toLocaleString("ko-KR")}</div>
                       </div>
                       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                         <button style={s.btnGhost} onClick={() => loadFromSaved(entry)}>불러오기</button>
@@ -663,8 +647,7 @@ export default function App() {
                             <tr key={i}>
                               <td style={s.td}>
                                 {isEditing ? (
-                                  <input
-                                    ref={doctorEditRef}
+                                  <input ref={doctorEditRef}
                                     value={editingDoctor.tempName}
                                     onChange={e => setEditingDoctor(prev => ({ ...prev, tempName: e.target.value }))}
                                     onBlur={commitEditDoctor}
@@ -674,8 +657,7 @@ export default function App() {
                                 ) : (
                                   <button onClick={() => startEditDoctor(d)}
                                     style={{ fontWeight: 500, background: "transparent", border: "0.5px solid transparent", borderRadius: 6, padding: "2px 4px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 13, color: "#111", width: "100%" }}>
-                                    {d.name || "-"}
-                                    <span style={{ fontSize: 10, color: "#ccc", flexShrink: 0 }}>✎</span>
+                                    {d.name || "-"}<span style={{ fontSize: 10, color: "#ccc", flexShrink: 0 }}>✎</span>
                                   </button>
                                 )}
                               </td>
