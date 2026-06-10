@@ -30,6 +30,18 @@ async function callAPI(base64, mediaType, prompt, apiKey, maxTokens = 2000, json
   return (data.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("").trim();
 }
 
+// 토큰 초과로 JSON이 잘렸을 때 완성된 항목까지 복구
+function safeParseJson(raw) {
+  try { return JSON.parse(raw); } catch {}
+  const lastClose = raw.lastIndexOf('},');
+  if (lastClose < 0) return null;
+  const partial = raw.slice(0, lastClose + 1);
+  for (const tail of [']}', '\n]}', '\n  ]\n}', '  ]\n}']) {
+    try { return JSON.parse(partial + tail); } catch {}
+  }
+  return null;
+}
+
 /* ── 유틸 ────────────────────────────────────────────── */
 function getMediaType(file) {
   const t = file.type;
@@ -337,7 +349,7 @@ export default function App() {
         setRawLogs(l => [...l, `[병원명 추출] ${extractedName || "(미확인)"}` ]);
       } catch {}
 
-      // 이미지별 전체 의사 추출 (JSON Schema 강제)
+      // 이미지별 전체 의사 추출 (JSON Schema 강제, 65536 토큰)
       setProgress(p => ({ ...p, label: "의사 정보 추출 중..." }));
       let done = 0;
       const CONCURRENCY = 4;
@@ -346,21 +358,25 @@ export default function App() {
         await Promise.allSettled(batch.map(async (img, bIdx) => {
           const imgIdx = i + bIdx;
           try {
-            const raw = await callAPI(img.base64, img.mediaType, PROMPT_ALL_DOCTORS, apiKey, 16384, DOCTORS_SCHEMA);
+            const raw = await callAPI(img.base64, img.mediaType, PROMPT_ALL_DOCTORS, apiKey, 65536, DOCTORS_SCHEMA);
             setRawLogs(l => [...l, `[이미지 ${imgIdx + 1}: ${img.fileName}]\n${raw}`]);
-            const parsed = JSON.parse(raw);
-            (parsed.doctors || []).filter(d => d.name && d.department).forEach(d => {
-              allDoctors.push({
-                name: d.name.trim(),
-                department: d.department.trim(),
-                schedule: (d.schedule || []).filter(s =>
-                  ["월","화","수","목","금","토","일"].includes(s.day) &&
-                  ["오전","오후"].includes(s.period)
-                ).map(s => ({ day: s.day, period: s.period === "오후" ? "PM" : "AM" })),
-                room: d.room?.trim() || null,
-                notes: d.notes?.trim() || null,
+            const parsed = safeParseJson(raw);
+            if (parsed?.doctors) {
+              parsed.doctors.filter(d => d.name && d.department).forEach(d => {
+                allDoctors.push({
+                  name: d.name.trim(),
+                  department: d.department.trim(),
+                  schedule: (d.schedule || []).filter(s =>
+                    ["월","화","수","목","금","토","일"].includes(s.day) &&
+                    ["오전","오후"].includes(s.period)
+                  ).map(s => ({ day: s.day, period: s.period === "오후" ? "PM" : "AM" })),
+                  room: d.room?.trim() || null,
+                  notes: d.notes?.trim() || null,
+                });
               });
-            });
+            } else {
+              setRawLogs(l => [...l, `[이미지 ${imgIdx + 1}] JSON 파싱 실패 (응답이 잘렸거나 형식 오류)`]);
+            }
           } catch (e) {
             setRawLogs(l => [...l, `[이미지 ${imgIdx + 1}] 오류: ${e.message}`]);
           }
