@@ -8,7 +8,12 @@ const BUNDLED_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
 const SAVES_KEY = "schedule_saves_v1";
 const LEGACY_KEY = "schedule_saved_data";
 
-async function callAPI(base64, mediaType, prompt, apiKey, maxTokens = 2000) {
+async function callAPI(base64, mediaType, prompt, apiKey, maxTokens = 2000, jsonSchema = null) {
+  const generationConfig = { maxOutputTokens: maxTokens, temperature: 0 };
+  if (jsonSchema) {
+    generationConfig.responseMimeType = "application/json";
+    generationConfig.responseSchema = jsonSchema;
+  }
   const res = await fetch(GEMINI_URL(apiKey), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -17,7 +22,7 @@ async function callAPI(base64, mediaType, prompt, apiKey, maxTokens = 2000) {
         { inline_data: { mime_type: mediaType, data: base64 } },
         { text: prompt },
       ]}],
-      generationConfig: { maxOutputTokens: maxTokens, temperature: 0 },
+      generationConfig,
     }),
   });
   const data = await res.json();
@@ -41,70 +46,49 @@ const PROMPT_HOSPITAL = `이 이미지는 병원 외래 스케줄 표입니다.
 병원명을 헤더, 로고 주변 텍스트에서 찾으세요.
 찾을 수 없다면 아무것도 출력하지 마세요.`;
 
-// 할루시네이션 방지: 이미지에 없는 진료과를 만들어내지 않도록 명시
-const PROMPT_DEPTS = `이 이미지는 병원 외래 스케줄 표입니다.
-이미지에 실제로 표시된 진료과명만 추출하세요.
+/* JSON Schema로 출력 구조 강제 → hallucination 구조적 차단 */
+const DOCTORS_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    doctors: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          name:       { type: "STRING" },
+          department: { type: "STRING" },
+          schedule: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                day:    { type: "STRING", enum: ["월","화","수","목","금","토","일"] },
+                period: { type: "STRING", enum: ["오전","오후"] },
+              },
+              required: ["day","period"],
+            },
+          },
+          room:  { type: "STRING" },
+          notes: { type: "STRING" },
+        },
+        required: ["name","department","schedule"],
+      },
+    },
+  },
+  required: ["doctors"],
+};
+
+const PROMPT_ALL_DOCTORS = `이 이미지는 병원 외래 스케줄 표입니다.
+이미지에 보이는 모든 의사의 정보를 추출하세요.
 
 ⚠️ 반드시 지켜야 할 규칙:
-• 이미지를 직접 읽어서 눈으로 확인되는 진료과명만 나열하세요
-• 병원에 일반적으로 있직한 진료과 목록을 교육지식으로 추가하지 마세요
-• 이미지에 없는 진료과를 절대 지어내지 마세요
-• 텍스트가 불분명하면 그 항목은 건너뜌세요
-• 진료과 이름만 줄바꿈으로 구분해서 출력하세요
-• 번호, 설명, 부연은 일절 출력하지 마세요
-
-예시 (이미지에 실제로 있을 때만):
-내분비내과
-류마티스내과
-비뇨의학과`;
-
-function makeDeptPrompt(dept) {
-  return `이 이미지는 병원 외래 스케줄 표입니다.
-"${dept}" 진료과에 속한 의사들만 추출해서 아래 형식으로 출력하세요.
-다른 설명 없이 데이터 줄만 출력하세요.
-
-⚠️ 의사 이름 정확도 최우선:
-• 이름의 각 한글 글자를 이미지에서 한 글자씩 정확히 읽으세요.
-• 초성·중성·종성을 각각 확인하세요.
-  예) 현(ㅎ+ㅕ+ㄴ) vs 원(ㅇ+ㅝ+ㄴ) — 초성 ㅎ vs ㅇ, 모음 ㅕ vs ㅝ 구분
-  예) 환 vs 관 — 초성 확인
-  예) 성 vs 생 — 종성 유무 확인
-• 추측하지 말고 이미지에 보이는 글자 그대로 입력하세요.
-• 이름 쓰기가 애매하면 이미지를 다시 한 번 자세히 살펴보세요.
-
-형식: 이름|일정목록|진료실|비고
-일정목록: 요일+오전/오후를 쉼표로 (예: 월오전,화오후,수오전)
-없는 항목은 - 로 표기
-
-예시:
-홍길동|월오전,수오전,금오전,화오후|-|당뇨병 고혈압
-김영희|화오전,목오전,토오전|301|종양`;
-}
-
-function parseDeptDoctors(text, department) {
-  return text.split("\n")
-    .map(l => l.trim())
-    .filter(l => l && l.includes("|") && !l.startsWith("#") && !l.startsWith("/"))
-    .map(line => {
-      const parts = line.split("|");
-      if (parts.length < 2) return null;
-      const [name, schedRaw, room, notes] = parts;
-      if (!name?.trim()) return null;
-      const schedule = (schedRaw || "").split(",")
-        .map(s => s.trim()).filter(Boolean)
-        .map(s => {
-          const dayMatch = s.match(/^([월화수목금토일])/);
-          const periodMatch = s.match(/(오전|오후)/);
-          if (!dayMatch) return null;
-          return { day: dayMatch[1], period: periodMatch?.[1] === "오후" ? "PM" : "AM" };
-        }).filter(Boolean);
-      return {
-        name: name.trim(), department, schedule,
-        room: room?.trim() === "-" ? null : room?.trim() || null,
-        notes: notes?.trim() === "-" ? null : notes?.trim() || null,
-      };
-    }).filter(Boolean);
-}
+• 이미지에서 직접 읽은 정보만 출력하세요 (병원 지식·추측 완전 금지)
+• 이미지에 있는 모든 의사를 빠짐없이 추출하세요 (한 명도 빠뜨리지 마세요)
+• 의사 이름을 이미지에서 한 글자씩 정확히 읽으세요
+  예) 현 vs 원 (초성 ㅎ vs ㅇ), 성 vs 생 (종성 유무), 환 vs 관
+• 진료과는 이미지에 표시된 그대로 입력하세요 (없는 진료과 절대 추가 금지)
+• schedule에는 외래 진료가 실제로 있는 요일/시간대만 포함하세요
+• 진료 없는 날/시간대는 schedule에서 제외하세요`;
 
 /* ── 진료과 드롭다운 ─────────────────────────────── */
 function DeptDropdown({ allDepts, selected, onChange }) {
@@ -215,7 +199,7 @@ export default function App() {
   const fileRef = useRef();
 
   const [stage, setStage] = useState("upload");
-  const [progress, setProgress] = useState({ imgCurrent: 0, imgTotal: 0, deptLabel: "", deptCurrent: 0, deptTotal: 0 });
+  const [progress, setProgress] = useState({ imgCurrent: 0, imgTotal: 0, label: "" });
   const [doctors, setDoctors] = useState([]);
   const [hospitalName, setHospitalName] = useState("");
   const [editingHospital, setEditingHospital] = useState(false);
@@ -344,47 +328,44 @@ export default function App() {
     setStage("analyzing"); setRawLogs([]); setHospitalName("");
     const allDoctors = [];
     try {
-      const firstImg = images[0];
-      setProgress({ imgCurrent: 0, imgTotal: images.length, deptLabel: "병원명 파악 중...", deptCurrent: 0, deptTotal: 0 });
+      // 병원명
+      setProgress({ imgCurrent: 0, imgTotal: images.length, label: "병원명 파악 중..." });
       try {
-        const nameRaw = await callAPI(firstImg.base64, firstImg.mediaType, PROMPT_HOSPITAL, apiKey, 100);
+        const nameRaw = await callAPI(images[0].base64, images[0].mediaType, PROMPT_HOSPITAL, apiKey, 100);
         const extractedName = nameRaw.trim().split("\n")[0].trim();
         if (extractedName) setHospitalName(extractedName);
-        setRawLogs(l => [...l, `[병원명 추출] ${extractedName || "(미확인)"}`]);
+        setRawLogs(l => [...l, `[병원명 추출] ${extractedName || "(미확인)"}` ]);
       } catch {}
 
-      setProgress({ imgCurrent: 0, imgTotal: images.length, deptLabel: "진료과 목록 파악 중...", deptCurrent: 0, deptTotal: 0 });
-      let deptsDone = 0;
-      const imageDepts = await Promise.all(images.map(async (img, imgIdx) => {
-        const deptsRaw = await callAPI(img.base64, img.mediaType, PROMPT_DEPTS, apiKey, 4096);
-        setRawLogs(l => [...l, `[이미지 ${imgIdx + 1}: ${img.fileName}]\n[진료과 목록]\n${deptsRaw}`]);
-        const depts = deptsRaw.split("\n").map(l => l.trim()).filter(l => l && l.length > 1 && !l.includes("|"));
-        if (!depts.length) setRawLogs(l => [...l, `[이미지 ${imgIdx + 1}] 진료과 없음, 건너뜀`]);
-        deptsDone++;
-        setProgress(p => ({ ...p, imgCurrent: deptsDone }));
-        return { img, imgIdx, depts };
-      }));
-
-      const tasks = [];
-      imageDepts.forEach(({ img, imgIdx, depts }) => depts.forEach(dept => tasks.push({ img, imgIdx, dept })));
-      if (!tasks.length) throw new Error("진료과 정보를 추출할 수 없었습니다.");
-
-      const CONCURRENCY = 4;
+      // 이미지별 전체 의사 추출 (JSON Schema 강제)
+      setProgress(p => ({ ...p, label: "의사 정보 추출 중..." }));
       let done = 0;
-      setProgress(p => ({ ...p, deptLabel: "의사 정보 추출 중...", deptCurrent: 0, deptTotal: tasks.length }));
-
-      for (let i = 0; i < tasks.length; i += CONCURRENCY) {
-        const batch = tasks.slice(i, i + CONCURRENCY);
-        await Promise.allSettled(batch.map(async ({ img, imgIdx, dept }) => {
+      const CONCURRENCY = 4;
+      for (let i = 0; i < images.length; i += CONCURRENCY) {
+        const batch = images.slice(i, i + CONCURRENCY);
+        await Promise.allSettled(batch.map(async (img, bIdx) => {
+          const imgIdx = i + bIdx;
           try {
-            const deptRaw = await callAPI(img.base64, img.mediaType, makeDeptPrompt(dept), apiKey, 2000);
-            setRawLogs(l => [...l, `[이미지 ${imgIdx + 1} / ${dept}]\n${deptRaw}`]);
-            allDoctors.push(...parseDeptDoctors(deptRaw, dept));
+            const raw = await callAPI(img.base64, img.mediaType, PROMPT_ALL_DOCTORS, apiKey, 16384, DOCTORS_SCHEMA);
+            setRawLogs(l => [...l, `[이미지 ${imgIdx + 1}: ${img.fileName}]\n${raw}`]);
+            const parsed = JSON.parse(raw);
+            (parsed.doctors || []).filter(d => d.name && d.department).forEach(d => {
+              allDoctors.push({
+                name: d.name.trim(),
+                department: d.department.trim(),
+                schedule: (d.schedule || []).filter(s =>
+                  ["월","화","수","목","금","토","일"].includes(s.day) &&
+                  ["오전","오후"].includes(s.period)
+                ).map(s => ({ day: s.day, period: s.period === "오후" ? "PM" : "AM" })),
+                room: d.room?.trim() || null,
+                notes: d.notes?.trim() || null,
+              });
+            });
           } catch (e) {
-            setRawLogs(l => [...l, `[이미지 ${imgIdx + 1} / ${dept}] 오류: ${e.message}`]);
+            setRawLogs(l => [...l, `[이미지 ${imgIdx + 1}] 오류: ${e.message}`]);
           }
           done++;
-          setProgress(p => ({ ...p, deptCurrent: done, deptLabel: `${dept} 추출 완료 (${done}/${tasks.length})` }));
+          setProgress(p => ({ ...p, imgCurrent: done, label: `이미지 ${done}/${images.length} 완료` }));
         }));
       }
 
@@ -419,9 +400,7 @@ export default function App() {
 
   const overallPct = (() => {
     if (progress.imgTotal === 0) return 5;
-    const phase1 = (progress.imgCurrent / progress.imgTotal) * 30;
-    const phase2 = progress.deptTotal > 0 ? (progress.deptCurrent / progress.deptTotal) * 70 : 0;
-    return Math.round(Math.min(99, phase1 + phase2)) || 5;
+    return Math.round(Math.min(99, (progress.imgCurrent / progress.imgTotal) * 100)) || 5;
   })();
 
   const s = {
@@ -547,9 +526,10 @@ export default function App() {
               <div style={{ width: 28, height: 28, borderRadius: "50%", border: "2.5px solid #eee", borderTopColor: "#0D8A99", animation: "spin 0.8s linear infinite" }} />
               <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
               <div style={{ textAlign: "center" }}>
-                {images.length > 1 && <div style={{ fontSize: 12, color: "#aaa", marginBottom: 4 }}>이미지 {progress.imgCurrent} / {progress.imgTotal} 진료과 파악 완료</div>}
-                <div style={{ fontSize: 14, fontWeight: 500 }}>{progress.deptLabel}</div>
-                {progress.deptTotal > 0 && <div style={{ fontSize: 12, color: "#bbb", marginTop: 4 }}>{progress.deptCurrent} / {progress.deptTotal} 완료</div>}
+                <div style={{ fontSize: 14, fontWeight: 500 }}>{progress.label}</div>
+                {images.length > 1 && progress.imgCurrent > 0 && (
+                  <div style={{ fontSize: 12, color: "#bbb", marginTop: 4 }}>{progress.imgCurrent} / {progress.imgTotal} 완료</div>
+                )}
               </div>
               <div style={s.progressBar}><div style={{ height: "100%", width: overallPct + "%", background: "#0D8A99", borderRadius: 99, transition: "width 0.3s ease" }} /></div>
               <div style={{ fontSize: 12, color: "#bbb" }}>전체 진행률 {overallPct}%</div>
