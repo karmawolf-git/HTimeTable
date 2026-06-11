@@ -326,7 +326,7 @@ export default function App() {
     const th = (txt, bg, color, center = true) =>
       `<th style="background:${bg};color:${color};font-weight:bold;text-align:${center?'center':'left'};border:1px solid #bbb;padding:6px 10px;font-size:12px;white-space:nowrap;">${esc(txt)}</th>`;
     const td = (txt, bg, color, center = false, bold = false) =>
-      `<td style="background:${bg};color:${color};text-align:${center?'center':'left'};border:1px solid #e0e0e0;padding:5px 9px;font-size:12px;${bold?'font-weight:600;':''}">${esc(txt)}</td>`;
+      `<td style="background:${bg};color:${color};text-align:${center?'center':'left'};border:1px solid #e0e0e0;padding:5px 9px;font-size:12px;${bold?'font-weight:600;':''}">` + esc(txt) + `</td>`;
 
     const headerRow = [
       th("의사명",   "#EEF8FA", "#0A5D6E", false),
@@ -441,7 +441,7 @@ export default function App() {
   const allDepts = [...new Set(doctors.map(d => d.department).filter(Boolean))].sort();
 
   const copyTable = () => {
-    const rows = doctors.map(d => {
+    const rows = filtered.map(d => {
       const sched = (d.schedule||[]).map(s => s.day + (s.period === "PM" ? "오후" : "오전")).join(", ");
       return [d.name, d.department, sched, d.room||"", d.notes||""].join("\t");
     });
