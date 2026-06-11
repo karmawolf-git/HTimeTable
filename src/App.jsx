@@ -102,6 +102,10 @@ const PROMPT_ALL_DOCTORS = `이 이미지는 병원 외래 스케줄 표입니�
 • schedule에는 외래 진료가 실제로 있는 요일/시간대만 포함하세요
 • 진료 없는 날/시간대는 schedule에서 제외하세요`;
 
+// CSV 스케줄 코럼: 월오전, 월오후, 화오전, ...
+const CSV_DAY_COLS = ["월","화","수","목","금","토"];
+const CSV_SLOTS = CSV_DAY_COLS.flatMap(d => [`${d}오전`, `${d}오후`]);
+
 /* ── 진료과 드롭다운 ─────────────────────────────── */
 function DeptDropdown({ allDepts, selected, onChange }) {
   const [open, setOpen] = useState(false);
@@ -319,12 +323,19 @@ export default function App() {
 
   const downloadCSV = () => {
     const rows = [
-      ["의사명", "진료과", "외래일정", "진료실", "비고"],
-      ...doctors.map(d => [
-        d.name || "", d.department || "",
-        (d.schedule||[]).map(s => s.day + (s.period === "PM" ? "오후" : "오전")).join(" "),
-        d.room || "", d.notes || "",
-      ]),
+      ["의사명", "진료과", ...CSV_SLOTS, "진료실", "비고"],
+      ...doctors.map(d => {
+        const has = new Set(
+          (d.schedule || []).map(s => s.day + (s.period === "PM" ? "오후" : "오전"))
+        );
+        return [
+          d.name || "",
+          d.department || "",
+          ...CSV_SLOTS.map(slot => has.has(slot) ? "●" : ""),
+          d.room || "",
+          d.notes || "",
+        ];
+      }),
     ];
     const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
