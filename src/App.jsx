@@ -102,9 +102,8 @@ const PROMPT_ALL_DOCTORS = `이 이미지는 병원 외래 스케줄 표입니�
 • schedule에는 외래 진료가 실제로 있는 요일/시간대만 포함하세요
 • 진료 없는 날/시간대는 schedule에서 제외하세요`;
 
-// CSV 스케줄 코럼: 월오전, 월오후, 화오전, ...
-const CSV_DAY_COLS = ["월","화","수","목","금","토"];
-const CSV_SLOTS = CSV_DAY_COLS.flatMap(d => [`${d}오전`, `${d}오후`]);
+const XLS_DAYS = ["월","화","수","목","금","토"];
+const XLS_SLOTS = XLS_DAYS.flatMap(d => [`${d}오전`, `${d}오후`]);
 
 /* ── 진료과 드롭다운 ─────────────────────────────── */
 function DeptDropdown({ allDepts, selected, onChange }) {
@@ -321,28 +320,57 @@ export default function App() {
     setSaves(next);
   };
 
-  const downloadCSV = () => {
-    const rows = [
-      ["의사명", "진료과", ...CSV_SLOTS, "진료실", "비고"],
-      ...doctors.map(d => {
-        const has = new Set(
-          (d.schedule || []).map(s => s.day + (s.period === "PM" ? "오후" : "오전"))
-        );
-        return [
-          d.name || "",
-          d.department || "",
-          ...CSV_SLOTS.map(slot => has.has(slot) ? "●" : ""),
-          d.room || "",
-          d.notes || "",
-        ];
+  // HTML-based XLS: Excel이 읽을 수 있는 HTML 형식으로 배경색 포함
+  const downloadXLS = () => {
+    const esc = (v) => String(v || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    const th = (txt, bg, color, center = true) =>
+      `<th style="background:${bg};color:${color};font-weight:bold;text-align:${center?'center':'left'};border:1px solid #bbb;padding:6px 10px;font-size:12px;white-space:nowrap;">${esc(txt)}</th>`;
+    const td = (txt, bg, color, center = false, bold = false) =>
+      `<td style="background:${bg};color:${color};text-align:${center?'center':'left'};border:1px solid #e0e0e0;padding:5px 9px;font-size:12px;${bold?'font-weight:600;':''}">${esc(txt)}</td>`;
+
+    const headerRow = [
+      th("의사명",   "#EEF8FA", "#0A5D6E", false),
+      th("진료과",   "#EEF8FA", "#0A5D6E", false),
+      ...XLS_SLOTS.map(slot => {
+        const am = slot.endsWith("오전");
+        return th(slot, am ? "#C5EDF3" : "#FAE8C8", am ? "#065566" : "#5A3000");
       }),
-    ];
-    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+      th("진료실", "#EEF8FA", "#0A5D6E"),
+      th("비고",   "#EEF8FA", "#0A5D6E", false),
+    ].join("");
+
+    const dataRows = doctors.map((d, ri) => {
+      const has = new Set((d.schedule||[]).map(s => s.day + (s.period==="PM"?"오후":"오전")));
+      const rowBg = ri % 2 === 0 ? "#ffffff" : "#F7FCFD";
+      const cells = [
+        td(d.name||"",       rowBg, "#111", false, true),
+        td(d.department||"", rowBg, "#444"),
+        ...XLS_SLOTS.map(slot => {
+          const am = slot.endsWith("오전");
+          return has.has(slot)
+            ? td("●", am ? "#D9F4F7" : "#FAEEDA", am ? "#065566" : "#5A3000", true, true)
+            : td("",  rowBg,   "#ddd", true);
+        }),
+        td(d.room||"",  rowBg, "#555", true),
+        td(d.notes||"", rowBg, "#666"),
+      ].join("");
+      return `<tr>${cells}</tr>`;
+    }).join("");
+
+    const html = `<html xmlns:x="urn:schemas-microsoft-com:office:excel">
+<head><meta charset="UTF-8">
+<style>table{border-collapse:collapse;font-family:'맑은 고딕',Arial,sans-serif;}</style>
+</head><body>
+<table>
+<thead><tr>${headerRow}</tr></thead>
+<tbody>${dataRows}</tbody>
+</table></body></html>`;
+
+    const blob = new Blob(["﻿" + html], { type: "application/vnd.ms-excel;charset=UTF-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `외래스케줄${hospitalName ? `_${hospitalName}` : ""}_${new Date().toISOString().slice(0,10)}.csv`;
+    a.download = `외래스케줄${hospitalName ? `_${hospitalName}` : ""}_${new Date().toISOString().slice(0,10)}.xls`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -351,7 +379,6 @@ export default function App() {
     setStage("analyzing"); setRawLogs([]); setHospitalName("");
     const allDoctors = [];
     try {
-      // 병원명
       setProgress({ imgCurrent: 0, imgTotal: images.length, label: "병원명 파악 중..." });
       try {
         const nameRaw = await callAPI(images[0].base64, images[0].mediaType, PROMPT_HOSPITAL, apiKey, 100);
@@ -360,7 +387,6 @@ export default function App() {
         setRawLogs(l => [...l, `[병원명 추출] ${extractedName || "(미확인)"}` ]);
       } catch {}
 
-      // 이미지별 전체 의사 추출 (JSON Schema 강제, 65536 토큰)
       setProgress(p => ({ ...p, label: "의사 정보 추출 중..." }));
       let done = 0;
       const CONCURRENCY = 4;
@@ -386,7 +412,7 @@ export default function App() {
                 });
               });
             } else {
-              setRawLogs(l => [...l, `[이미지 ${imgIdx + 1}] JSON 파싱 실패 (응답이 잘렸거나 형식 오류)`]);
+              setRawLogs(l => [...l, `[이미지 ${imgIdx + 1}] JSON 파싱 실패`]);
             }
           } catch (e) {
             setRawLogs(l => [...l, `[이미지 ${imgIdx + 1}] 오류: ${e.message}`]);
@@ -607,7 +633,7 @@ export default function App() {
                   </div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <button style={s.btnSm} onClick={saveToLocal}>{savedToast ? "✓ 저장됨" : "💾 저장"}</button>
-                    <button style={s.btnSm} onClick={downloadCSV}>📥 CSV</button>
+                    <button style={s.btnSm} onClick={downloadXLS}>📥 엑셀</button>
                     <button style={s.btnSm} onClick={copyTable}>{copied ? "✓ 복사됨" : "⎘ 복사"}</button>
                     <button style={{ ...s.btnSm, color: "#888" }} onClick={reset}>↺ 새 분석</button>
                   </div>
