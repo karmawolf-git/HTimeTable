@@ -326,7 +326,7 @@ export default function App() {
     const th = (txt, bg, color, center = true) =>
       `<th style="background:${bg};color:${color};font-weight:bold;text-align:${center?'center':'left'};border:1px solid #bbb;padding:6px 10px;font-size:12px;white-space:nowrap;">${esc(txt)}</th>`;
     const td = (txt, bg, color, center = false, bold = false) =>
-      `<td style="background:${bg};color:${color};text-align:${center?'center':'left'};border:1px solid #e0e0e0;padding:5px 9px;font-size:12px;${bold?'font-weight:600;':''}">` + esc(txt) + `</td>`;
+      `<td style="background:${bg};color:${color};text-align:${center?'center':'left'};border:1px solid #e0e0e0;padding:5px 9px;font-size:12px;${bold?'font-weight:600;':''}">${esc(txt)}</td>`;
 
     const headerRow = [
       th("의사명",   "#EEF8FA", "#0A5D6E", false),
@@ -494,8 +494,11 @@ export default function App() {
         </div>
         <div style={{ color: "#fff", fontSize: 20, fontWeight: 700, letterSpacing: "-0.3px" }}>Hospital TimeTable</div>
         <div style={{ color: "rgba(255,255,255,0.72)", fontSize: 12, marginTop: 3 }}>병원 진료 일정과 시간표를 한눈에 정리·관리할 수 있는 스케줄 뷰어입니다</div>
+        <div style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(220,50,50,0.22)", border: "0.5px solid rgba(255,150,150,0.45)", color: "rgba(255,210,210,0.95)", fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 20, letterSpacing: "0.08em" }}>
+          🔒 INTERNAL USE ONLY
+        </div>
         {!BUNDLED_API_KEY && apiKey && (
-          <button style={{ marginTop: 12, padding: "5px 10px", borderRadius: 8, fontSize: 11, cursor: "pointer", border: "0.5px solid rgba(255,255,255,0.35)", background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.88)", display: "inline-flex", alignItems: "center", gap: 5 }}
+          <button style={{ marginTop: 8, padding: "5px 10px", borderRadius: 8, fontSize: 11, cursor: "pointer", border: "0.5px solid rgba(255,255,255,0.35)", background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.88)", display: "inline-flex", alignItems: "center", gap: 5 }}
             onClick={() => { localStorage.removeItem("gemini_api_key"); setApiKey(""); setShowApiKeySetup(true); }}>
             🔑 API키 변경
           </button>
