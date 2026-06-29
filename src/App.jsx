@@ -105,6 +105,54 @@ const PROMPT_ALL_DOCTORS = `이 이미지는 병원 외래 스케줄 표입니�
 const XLS_DAYS = ["월","화","수","목","금","토"];
 const XLS_SLOTS = XLS_DAYS.flatMap(d => [`${d}오전`, `${d}오후`]);
 
+/* ── PDF 보고서 스타일 (새 탭 인쇄용) ─────────────── */
+const REPORT_CSS = `
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Pretendard','맑은 고딕','Malgun Gothic',-apple-system,sans-serif; color: #1a1a1a; background: #eceff1; padding: 24px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.page { max-width: 1120px; margin: 0 auto; background: #fff; padding: 32px 36px; border-radius: 8px; box-shadow: 0 2px 20px rgba(0,0,0,0.08); }
+.rpt-head { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 3px solid #0D8A99; padding-bottom: 14px; margin-bottom: 22px; }
+.rpt-title { font-size: 26px; font-weight: 800; color: #0A5D6E; letter-spacing: -0.5px; }
+.rpt-sub { font-size: 13px; color: #888; margin-top: 3px; }
+.rpt-meta { text-align: right; font-size: 12px; color: #666; line-height: 1.7; }
+.rpt-filter { margin-top: 2px; color: #0D8A99; font-weight: 600; }
+.sec { margin-bottom: 26px; }
+.sec-title { font-size: 14px; font-weight: 700; color: #0A5D6E; margin-bottom: 10px; padding-left: 9px; border-left: 4px solid #2CC0D0; }
+table.cal { width: 100%; border-collapse: collapse; table-layout: fixed; }
+table.cal th, table.cal td { border: 1px solid #d8e6e9; }
+.corner { width: 54px; background: #f4f8f9; }
+.dayhead { background: #0D8A99; color: #fff; font-size: 14px; font-weight: 700; padding: 9px 0; text-align: center; }
+.period { width: 54px; text-align: center; font-weight: 700; font-size: 13px; }
+.period.am { background: #E5F7FA; color: #076478; }
+.period.pm { background: #FEF4E2; color: #7a4a05; }
+td.cell { vertical-align: top; padding: 6px; height: 88px; }
+.doc { border-radius: 6px; padding: 4px 7px; margin-bottom: 4px; }
+.doc.am { background: #D9F4F7; border: 1px solid #8AD7E0; }
+.doc.pm { background: #FAEEDA; border: 1px solid #F1CB8A; }
+.doc .dn { display: block; font-size: 12.5px; font-weight: 700; color: #111; }
+.doc .dd { display: block; font-size: 10px; color: #777; margin-top: 1px; }
+.empty { display: block; text-align: center; color: #ccc; padding-top: 8px; }
+table.list { width: 100%; border-collapse: collapse; }
+table.list th { background: #0A5D6E; color: #fff; font-size: 12px; font-weight: 600; padding: 8px 10px; text-align: left; }
+table.list td { padding: 7px 10px; border-bottom: 1px solid #eee; font-size: 12px; vertical-align: top; }
+table.list tr.odd td { background: #F7FCFD; }
+.c-name { font-weight: 700; color: #111; white-space: nowrap; }
+.dept { display: inline-block; background: #eef4f5; border: 1px solid #d3e3e6; border-radius: 4px; padding: 1px 7px; font-size: 11px; color: #4a6b70; }
+.pill { display: inline-block; border-radius: 4px; padding: 1px 6px; font-size: 10.5px; margin: 1px; }
+.pill.am { background: #D9F4F7; color: #076478; border: 1px solid #8AD7E0; }
+.pill.pm { background: #FAEEDA; color: #7a4a05; border: 1px solid #F1CB8A; }
+.c-room { font-family: monospace; color: #555; }
+.c-note { color: #777; }
+.muted { color: #bbb; }
+.rpt-foot { margin-top: 24px; text-align: center; font-size: 10px; color: #bbb; letter-spacing: 0.05em; }
+@media print {
+  body { background: #fff; padding: 0; }
+  .page { box-shadow: none; border-radius: 0; max-width: none; padding: 0; }
+  table.list tr, .doc { page-break-inside: avoid; }
+  thead { display: table-header-group; }
+}
+@page { size: A4 landscape; margin: 12mm; }
+`;
+
 /* ── 진료과 드롭다운 ─────────────────────────────── */
 function DeptDropdown({ allDepts, selected, onChange }) {
   const [open, setOpen] = useState(false);
@@ -375,6 +423,69 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  // C안: 주간 달력 + 의사 목록표를 인쇄용 HTML 보고서로 새 탭에 출력 (PDF 저장 유도)
+  const openReport = () => {
+    const esc = (v) => String(v ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    const list = filtered;
+    if (!list.length) { alert("출력할 데이터가 없습니다."); return; }
+
+    const days = dayFilters.length > 0 ? ALL_DAYS.filter(d => dayFilters.includes(d)) : ALL_DAYS;
+    const matrix = {};
+    days.forEach(day => { matrix[day + "_AM"] = []; matrix[day + "_PM"] = []; });
+    list.forEach(doc => {
+      (doc.schedule || []).forEach(sc => {
+        const key = sc.day + "_" + sc.period;
+        if (matrix[key] && !matrix[key].find(x => x.name === doc.name && x.department === doc.department))
+          matrix[key].push(doc);
+      });
+    });
+
+    const calHead = "<tr><th class='corner'></th>" + days.map(d => "<th class='dayhead'>" + esc(d) + "요일</th>").join("") + "</tr>";
+    const calBody = ["AM","PM"].map(period => {
+      const cells = days.map(day => {
+        const cell = matrix[day + "_" + period];
+        const inner = cell.length
+          ? cell.map(d => "<div class='doc " + (period==="AM"?"am":"pm") + "'><span class='dn'>" + esc(d.name) + "</span><span class='dd'>" + esc(d.department) + (d.room ? " · " + esc(d.room) + "호" : "") + "</span></div>").join("")
+          : "<span class='empty'>—</span>";
+        return "<td class='cell'>" + inner + "</td>";
+      }).join("");
+      return "<tr><td class='period " + (period==="AM"?"am":"pm") + "'>" + (period==="AM"?"오전":"오후") + "</td>" + cells + "</tr>";
+    }).join("");
+
+    const listRows = list.map((d, i) => {
+      const sched = (d.schedule||[]).map(sc => "<span class='pill " + (sc.period==="PM"?"pm":"am") + "'>" + esc(sc.day) + (sc.period==="PM"?"오후":"오전") + "</span>").join(" ");
+      return "<tr class='" + (i%2?"odd":"") + "'><td class='c-name'>" + esc(d.name) + "</td><td><span class='dept'>" + esc(d.department) + "</span></td><td>" + (sched || "<span class='muted'>정보 없음</span>") + "</td><td class='c-room'>" + esc(d.room||"-") + "</td><td class='c-note'>" + esc(d.notes||"-") + "</td></tr>";
+    }).join("");
+
+    const filterNote = [
+      deptFilters.length ? "진료과 " + deptFilters.join(", ") : null,
+      dayFilters.length ? "요일 " + dayFilters.join(", ") : null,
+      search ? "검색 '" + search + "'" : null,
+    ].filter(Boolean).join("  ·  ");
+
+    const today = new Date().toISOString().slice(0,10);
+    const deptCount = [...new Set(list.map(d => d.department).filter(Boolean))].length;
+    const title = (hospitalName || "외래 진료 일정") + " 시간표";
+
+    const html = "<!DOCTYPE html><html lang='ko'><head><meta charset='UTF-8'><title>" + esc(title) + "</title><style>" + REPORT_CSS + "</style></head><body>" +
+      "<div class='page'>" +
+        "<header class='rpt-head'>" +
+          "<div><div class='rpt-title'>" + esc(hospitalName || "외래 진료 일정") + "</div><div class='rpt-sub'>주간 외래 진료 시간표</div></div>" +
+          "<div class='rpt-meta'><div>발행일 " + today + "</div><div>" + list.length + "명 · " + deptCount + "개 진료과</div>" + (filterNote ? "<div class='rpt-filter'>" + esc(filterNote) + "</div>" : "") + "</div>" +
+        "</header>" +
+        "<section class='sec'><h2 class='sec-title'>주간 달력</h2><table class='cal'><thead>" + calHead + "</thead><tbody>" + calBody + "</tbody></table></section>" +
+        "<section class='sec'><h2 class='sec-title'>의사 목록</h2><table class='list'><thead><tr><th>의사명</th><th>진료과</th><th>외래 일정</th><th>진료실</th><th>비고</th></tr></thead><tbody>" + listRows + "</tbody></table></section>" +
+        "<footer class='rpt-foot'>🔒 Internal Use Only · Hospital TimeTable</footer>" +
+      "</div>" +
+      "<script>window.onload=function(){setTimeout(function(){window.print();},400);};<\/script>" +
+      "</body></html>";
+
+    const w = window.open("", "_blank");
+    if (!w) { alert("팝업이 차단되어 보고서를 열 수 없습니다. 브라우저의 팝업 차단을 해제해주세요."); return; }
+    w.document.write(html);
+    w.document.close();
+  };
+
   const analyze = async () => {
     setStage("analyzing"); setRawLogs([]); setHospitalName("");
     const allDoctors = [];
@@ -636,6 +747,7 @@ export default function App() {
                   </div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <button style={s.btnSm} onClick={saveToLocal}>{savedToast ? "✓ 저장됨" : "💾 저장"}</button>
+                    <button style={s.btnSm} onClick={openReport}>📄 PDF</button>
                     <button style={s.btnSm} onClick={downloadXLS}>📥 엑셀</button>
                     <button style={s.btnSm} onClick={copyTable}>{copied ? "✓ 복사됨" : "⎘ 복사"}</button>
                     <button style={{ ...s.btnSm, color: "#888" }} onClick={reset}>↺ 새 분석</button>
