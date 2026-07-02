@@ -189,8 +189,25 @@ function DeptDropdown({ allDepts, selected, onChange }) {
 /* ── 요일별 그리드 ──────────────────────────────── */
 const ALL_DAYS = ["월", "화", "수", "목", "금", "토"];
 
-function DayView({ doctors, search, deptFilters, dayFilters }) {
+// 진료과 구분용 범주형 팔레트 (고정 순서 — 데이터셋 전체 진료과 목록 기준 인덱싱)
+const DEPT_PALETTE = [
+  { bg: "#E1ECF9", text: "#1B4E8B", border: "#9FC2ED" }, // blue
+  { bg: "#DFF4EC", text: "#12724F", border: "#98DBC3" }, // aqua
+  { bg: "#FCF2DB", text: "#9A6900", border: "#F7D58C" }, // yellow
+  { bg: "#DBEEDB", text: "#005500", border: "#8CC78C" }, // green
+  { bg: "#E6E3F3", text: "#30266D", border: "#AEA6D7" }, // violet
+  { bg: "#FBE6E5", text: "#942F2F", border: "#F2ADAD" }, // red
+  { bg: "#FCEDF2", text: "#97506B", border: "#F5C4D6" }, // magenta
+  { bg: "#FCEAE3", text: "#994422", border: "#F6BBA4" }, // orange
+];
+function deptColor(dept, allDepts) {
+  const idx = allDepts.indexOf(dept);
+  return DEPT_PALETTE[(idx < 0 ? 0 : idx) % DEPT_PALETTE.length];
+}
+
+function DayView({ doctors, search, deptFilters, dayFilters, allDepts }) {
   const activeDays = dayFilters.length > 0 ? ALL_DAYS.filter(d => dayFilters.includes(d)) : ALL_DAYS;
+  const multiDept = deptFilters.length > 1;
   const filtered = doctors.filter(d => {
     const q = search.toLowerCase();
     return (!q || (d.name||"").toLowerCase().includes(q) || (d.department||"").toLowerCase().includes(q))
@@ -208,44 +225,64 @@ function DayView({ doctors, search, deptFilters, dayFilters }) {
   const hasAny = activeDays.some(d => matrix[`${d}_AM`].length || matrix[`${d}_PM`].length);
   if (!hasAny) return <div style={{ padding: "2rem", textAlign: "center", color: "#bbb", fontSize: 13 }}>표시할 일정이 없습니다</div>;
   return (
-    <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: activeDays.length * 110 }}>
-        <colgroup><col style={{ width: 52 }} />{activeDays.map(d => <col key={d} />)}</colgroup>
-        <thead>
-          <tr>
-            <th style={{ padding: "8px 6px", background: "#f9f9f9", borderBottom: "0.5px solid #ddd", fontSize: 11, color: "#bbb" }} />
-            {activeDays.map(day => (
-              <th key={day} style={{ padding: "9px 8px", background: "#f9f9f9", borderBottom: "0.5px solid #ddd", borderLeft: "0.5px solid #f0f0f0", fontSize: 12, fontWeight: 600, color: "#444", textAlign: "center" }}>
-                {day}요일
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {["AM", "PM"].map(period => (
-            <tr key={period} style={{ verticalAlign: "top" }}>
-              <td style={{ padding: "10px 4px", textAlign: "center", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", borderBottom: "0.5px solid #eee", borderRight: "0.5px solid #ddd", color: period === "AM" ? "#076478" : "#633806", background: period === "AM" ? "#E5F7FA" : "#fef9f0" }}>
-                {period === "AM" ? "오전" : "오후"}
-              </td>
-              {activeDays.map(day => {
-                const list = matrix[`${day}_${period}`];
-                return (
-                  <td key={day} style={{ padding: "6px 8px", verticalAlign: "top", borderBottom: "0.5px solid #f0f0f0", borderLeft: "0.5px solid #f0f0f0", background: list.length ? (period === "AM" ? "#F3FCFD" : "#fffdf8") : "transparent", minWidth: 90 }}>
-                    {list.length === 0
-                      ? <span style={{ color: "#e0e0e0", fontSize: 12, display: "block", textAlign: "center", paddingTop: 6 }}>—</span>
-                      : list.map((d, i) => (
-                        <div key={i} style={{ marginBottom: 4, padding: "4px 6px", borderRadius: 6, background: period === "AM" ? "#D9F4F7" : "#FAEEDA", border: `0.5px solid ${period === "AM" ? "#77CED9" : "#FAC775"}` }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: "#111", lineHeight: 1.3 }}>{d.name}</div>
-                          <div style={{ fontSize: 10, color: "#888", marginTop: 1 }}>{d.department}{d.room ? ` · ${d.room}호` : ""}</div>
-                        </div>
-                      ))}
-                  </td>
-                );
-              })}
+    <div>
+      {multiDept && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", padding: "10px 4px 4px" }}>
+          {deptFilters.map(dep => {
+            const c = deptColor(dep, allDepts);
+            return (
+              <span key={dep} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 20, fontSize: 11, fontWeight: 600, background: c.bg, color: c.text, border: `0.5px solid ${c.border}` }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: c.text, flexShrink: 0 }} />
+                {dep}
+              </span>
+            );
+          })}
+        </div>
+      )}
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: activeDays.length * 110 }}>
+          <colgroup><col style={{ width: 52 }} />{activeDays.map(d => <col key={d} />)}</colgroup>
+          <thead>
+            <tr>
+              <th style={{ padding: "8px 6px", background: "#f9f9f9", borderBottom: "0.5px solid #ddd", fontSize: 11, color: "#bbb" }} />
+              {activeDays.map(day => (
+                <th key={day} style={{ padding: "9px 8px", background: "#f9f9f9", borderBottom: "0.5px solid #ddd", borderLeft: "0.5px solid #f0f0f0", fontSize: 12, fontWeight: 600, color: "#444", textAlign: "center" }}>
+                  {day}요일
+                </th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {["AM", "PM"].map(period => (
+              <tr key={period} style={{ verticalAlign: "top" }}>
+                <td style={{ padding: "10px 4px", textAlign: "center", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", borderBottom: "0.5px solid #eee", borderRight: "0.5px solid #ddd", color: period === "AM" ? "#076478" : "#633806", background: period === "AM" ? "#E5F7FA" : "#fef9f0" }}>
+                  {period === "AM" ? "오전" : "오후"}
+                </td>
+                {activeDays.map(day => {
+                  const list = matrix[`${day}_${period}`];
+                  return (
+                    <td key={day} style={{ padding: "6px 8px", verticalAlign: "top", borderBottom: "0.5px solid #f0f0f0", borderLeft: "0.5px solid #f0f0f0", background: list.length ? (period === "AM" ? "#F3FCFD" : "#fffdf8") : "transparent", minWidth: 90 }}>
+                      {list.length === 0
+                        ? <span style={{ color: "#e0e0e0", fontSize: 12, display: "block", textAlign: "center", paddingTop: 6 }}>—</span>
+                        : list.map((d, i) => {
+                          const c = multiDept ? deptColor(d.department, allDepts) : null;
+                          const bg = c ? c.bg : (period === "AM" ? "#D9F4F7" : "#FAEEDA");
+                          const border = c ? c.border : (period === "AM" ? "#77CED9" : "#FAC775");
+                          return (
+                            <div key={i} style={{ marginBottom: 4, padding: "4px 6px", borderRadius: 6, background: bg, border: `0.5px solid ${border}` }}>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: "#111", lineHeight: 1.3 }}>{d.name}</div>
+                              <div style={{ fontSize: 10, color: c ? c.text : "#888", fontWeight: c ? 600 : 400, marginTop: 1 }}>{d.department}{d.room ? ` · ${d.room}호` : ""}</div>
+                            </div>
+                          );
+                        })}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -825,7 +862,7 @@ export default function App() {
                 </div>
               )}
 
-              {viewMode === "day" && <DayView doctors={doctors} search={search} deptFilters={deptFilters} dayFilters={dayFilters} />}
+              {viewMode === "day" && <DayView doctors={doctors} search={search} deptFilters={deptFilters} dayFilters={dayFilters} allDepts={allDepts} />}
 
               <div style={{ padding: "12px 16px", borderTop: "0.5px solid #eee" }}>
                 <button style={{ fontSize: 12, color: "#aaa", cursor: "pointer", background: "none", border: "none", display: "flex", alignItems: "center", gap: 6, padding: 0 }} onClick={() => setShowRaw(r => !r)}>
