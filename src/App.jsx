@@ -828,6 +828,7 @@ export default function App() {
                         ? <tr><td colSpan={5} style={{ ...s.td, textAlign: "center", color: "#bbb", padding: "2rem" }}>검색 결과가 없습니다</td></tr>
                         : filtered.map((d, i) => {
                           const isEditing = editingDoctor?.name === d.name && editingDoctor?.department === d.department;
+                          const deptC = d.department ? deptColor(d.department, allDepts) : null;
                           return (
                             <tr key={i}>
                               <td style={s.td}>
@@ -846,7 +847,10 @@ export default function App() {
                                   </button>
                                 )}
                               </td>
-                              <td style={s.td}><span style={s.deptBadge}>{d.department||"-"}</span></td>
+                              <td style={s.td}>{deptC
+                                ? <span style={{ display: "inline-block", padding: "2px 7px", borderRadius: 4, fontSize: 11, fontWeight: 600, background: deptC.bg, color: deptC.text, border: `0.5px solid ${deptC.border}` }}>{d.department}</span>
+                                : <span style={s.deptBadge}>-</span>
+                              }</td>
                               <td style={s.td}>{!(d.schedule||[]).length
                                 ? <span style={{ color: "#bbb", fontSize: 12 }}>정보 없음</span>
                                 : (d.schedule||[]).map((sc, j) => <span key={j} style={sc.period === "PM" ? s.pillPM : s.pillAM}>{sc.day} {sc.period === "PM" ? "오후" : "오전"}</span>)
