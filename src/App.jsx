@@ -82,6 +82,10 @@ const DOCTORS_SCHEMA = {
           },
           room:  { type: "STRING" },
           notes: { type: "STRING" },
+          closedDates: {
+            type: "ARRAY",
+            items: { type: "STRING" },
+          },
         },
         required: ["name","department","schedule"],
       },
@@ -100,7 +104,9 @@ const PROMPT_ALL_DOCTORS = `이 이미지는 병원 외래 스케줄 표입니�
   예) 현 vs 원 (초성 ㅎ vs ㅇ), 성 vs 생 (종성 유무), 환 vs 관
 • 진료과는 이미지에 표시된 그대로 입력하세요 (없는 진료과 절대 추가 금지)
 • schedule에는 외래 진료가 실제로 있는 요일/시간대만 포함하세요
-• 진료 없는 날/시간대는 schedule에서 제외하세요`;
+• 진료 없는 날/시간대는 schedule에서 제외하세요
+• 이미지에 특정 날짜의 휴진 안내가 있다면(예: "8/15 휴진", "9/1~9/3 학회참석으로 휴진") 해당 의사의 closedDates에 원문 그대로 추출하세요
+• 휴진 안내가 없으면 closedDates는 빈 배열로 두세요`;
 
 const XLS_DAYS = ["월","화","수","목","금","토"];
 const XLS_SLOTS = XLS_DAYS.flatMap(d => [`${d}오전`, `${d}오후`]);
@@ -141,7 +147,9 @@ table.list tr.odd td { background: #F7FCFD; }
 .pill.am { background: #D9F4F7; color: #076478; border: 1px solid #8AD7E0; }
 .pill.pm { background: #FAEEDA; color: #7a4a05; border: 1px solid #F1CB8A; }
 .c-room { font-family: monospace; color: #555; }
+.c-closed { color: #791F1F; font-weight: 600; }
 .c-note { color: #777; }
+.doc .cd { display: block; font-size: 9px; color: #791F1F; font-weight: 700; margin-top: 1px; }
 .muted { color: #bbb; }
 .rpt-foot { margin-top: 24px; text-align: center; font-size: 10px; color: #bbb; letter-spacing: 0.05em; }
 @media print {
@@ -272,6 +280,9 @@ function DayView({ doctors, search, deptFilters, dayFilters, allDepts }) {
                             <div key={i} style={{ marginBottom: 4, padding: "4px 6px", borderRadius: 6, background: bg, border: `0.5px solid ${border}` }}>
                               <div style={{ fontSize: 12, fontWeight: 600, color: "#111", lineHeight: 1.3 }}>{d.name}</div>
                               <div style={{ fontSize: 10, color: c ? c.text : "#888", fontWeight: c ? 600 : 400, marginTop: 1 }}>{d.department}{d.room ? ` · ${d.room}호` : ""}</div>
+                              {(d.closedDates||[]).length > 0 && (
+                                <div style={{ fontSize: 9, color: "#791F1F", fontWeight: 700, marginTop: 2 }}>🚫 {d.closedDates.join(", ")}</div>
+                              )}
                             </div>
                           );
                         })}
@@ -421,6 +432,7 @@ export default function App() {
         return th(slot, am ? "#C5EDF3" : "#FAE8C8", am ? "#065566" : "#5A3000");
       }),
       th("진료실", "#EEF8FA", "#0A5D6E"),
+      th("휴진",   "#FCEBEB", "#791F1F", false),
       th("비고",   "#EEF8FA", "#0A5D6E", false),
     ].join("");
 
@@ -437,6 +449,7 @@ export default function App() {
             : td("",  rowBg,   "#ddd", true);
         }),
         td(d.room||"",  rowBg, "#555", true),
+        td((d.closedDates||[]).join(", "), rowBg, "#791F1F"),
         td(d.notes||"", rowBg, "#666"),
       ].join("");
       return `<tr>${cells}</tr>`;
@@ -482,7 +495,7 @@ export default function App() {
       const cells = days.map(day => {
         const cell = matrix[day + "_" + period];
         const inner = cell.length
-          ? cell.map(d => "<div class='doc " + (period==="AM"?"am":"pm") + "'><span class='dn'>" + esc(d.name) + "</span><span class='dd'>" + esc(d.department) + (d.room ? " · " + esc(d.room) + "호" : "") + "</span></div>").join("")
+          ? cell.map(d => "<div class='doc " + (period==="AM"?"am":"pm") + "'><span class='dn'>" + esc(d.name) + "</span><span class='dd'>" + esc(d.department) + (d.room ? " · " + esc(d.room) + "호" : "") + "</span>" + ((d.closedDates && d.closedDates.length) ? "<span class='cd'>🚫 " + esc(d.closedDates.join(', ')) + "</span>" : "") + "</div>").join("")
           : "<span class='empty'>—</span>";
         return "<td class='cell'>" + inner + "</td>";
       }).join("");
@@ -491,7 +504,8 @@ export default function App() {
 
     const listRows = list.map((d, i) => {
       const sched = (d.schedule||[]).map(sc => "<span class='pill " + (sc.period==="PM"?"pm":"am") + "'>" + esc(sc.day) + (sc.period==="PM"?"오후":"오전") + "</span>").join(" ");
-      return "<tr class='" + (i%2?"odd":"") + "'><td class='c-name'>" + esc(d.name) + "</td><td><span class='dept'>" + esc(d.department) + "</span></td><td>" + (sched || "<span class='muted'>정보 없음</span>") + "</td><td class='c-room'>" + esc(d.room||"-") + "</td><td class='c-note'>" + esc(d.notes||"-") + "</td></tr>";
+      const closed = (d.closedDates||[]).length ? esc(d.closedDates.join(', ')) : "-";
+      return "<tr class='" + (i%2?"odd":"") + "'><td class='c-name'>" + esc(d.name) + "</td><td><span class='dept'>" + esc(d.department) + "</span></td><td>" + (sched || "<span class='muted'>정보 없음</span>") + "</td><td class='c-room'>" + esc(d.room||"-") + "</td><td class='c-closed'>" + closed + "</td><td class='c-note'>" + esc(d.notes||"-") + "</td></tr>";
     }).join("");
 
     const filterNote = [
@@ -511,7 +525,7 @@ export default function App() {
           "<div class='rpt-meta'><div>발행일 " + today + "</div><div>" + list.length + "명 · " + deptCount + "개 진료과</div>" + (filterNote ? "<div class='rpt-filter'>" + esc(filterNote) + "</div>" : "") + "</div>" +
         "</header>" +
         "<section class='sec'><h2 class='sec-title'>주간 달력</h2><table class='cal'><thead>" + calHead + "</thead><tbody>" + calBody + "</tbody></table></section>" +
-        "<section class='sec'><h2 class='sec-title'>의사 목록</h2><table class='list'><thead><tr><th>의사명</th><th>진료과</th><th>외래 일정</th><th>진료실</th><th>비고</th></tr></thead><tbody>" + listRows + "</tbody></table></section>" +
+        "<section class='sec'><h2 class='sec-title'>의사 목록</h2><table class='list'><thead><tr><th>의사명</th><th>진료과</th><th>외래 일정</th><th>진료실</th><th>휴진</th><th>비고</th></tr></thead><tbody>" + listRows + "</tbody></table></section>" +
         "<footer class='rpt-foot'>🔒 Internal Use Only · Hospital TimeTable</footer>" +
       "</div>" +
       "<script>window.onload=function(){setTimeout(function(){window.print();},400);};<\/script>" +
@@ -557,6 +571,7 @@ export default function App() {
                   ).map(s => ({ day: s.day, period: s.period === "오후" ? "PM" : "AM" })),
                   room: d.room?.trim() || null,
                   notes: d.notes?.trim() || null,
+                  closedDates: (d.closedDates || []).map(x => String(x).trim()).filter(Boolean),
                 });
               });
             } else {
@@ -591,9 +606,10 @@ export default function App() {
   const copyTable = () => {
     const rows = filtered.map(d => {
       const sched = (d.schedule||[]).map(s => s.day + (s.period === "PM" ? "오후" : "오전")).join(", ");
-      return [d.name, d.department, sched, d.room||"", d.notes||""].join("\t");
+      const closed = (d.closedDates||[]).join("; ");
+      return [d.name, d.department, sched, d.room||"", closed, d.notes||""].join("\t");
     });
-    navigator.clipboard.writeText(["의사명\t진료과\t외래일정\t진료실\t비고", ...rows].join("\n"))
+    navigator.clipboard.writeText(["의사명\t진료과\t외래일정\t진료실\t휴진\t비고", ...rows].join("\n"))
       .then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
   };
 
@@ -615,6 +631,7 @@ export default function App() {
     td: { padding: "10px 12px", borderBottom: "0.5px solid #f5f5f5", color: "#222", verticalAlign: "top", wordBreak: "keep-all", fontSize: 13 },
     pillAM: { display: "inline-block", margin: "2px 2px 2px 0", padding: "2px 7px", borderRadius: 4, fontSize: 11, background: "#D9F4F7", color: "#076478", border: "0.5px solid #77CED9" },
     pillPM: { display: "inline-block", margin: "2px 2px 2px 0", padding: "2px 7px", borderRadius: 4, fontSize: 11, background: "#FAEEDA", color: "#633806", border: "0.5px solid #FAC775" },
+    closedPill: { display: "inline-block", margin: "2px 2px 2px 0", padding: "2px 7px", borderRadius: 4, fontSize: 11, fontWeight: 600, background: "#FCEBEB", color: "#791F1F", border: "0.5px solid #F7C1C1" },
     deptBadge: { display: "inline-block", padding: "2px 7px", borderRadius: 4, fontSize: 11, background: "#f4f4f4", border: "0.5px solid #ddd", color: "#666" },
     countBadge: { display: "inline-flex", alignItems: "center", padding: "2px 8px", borderRadius: 20, fontSize: 11, fontWeight: 500, background: "#77CED9", color: "#076478" },
     filterInput: { flex: 1, minWidth: 140, padding: "6px 10px", fontSize: 13, border: "0.5px solid #ddd", borderRadius: 8, background: "#f9f9f9", color: "#222", outline: "none" },
@@ -821,11 +838,11 @@ export default function App() {
               {viewMode === "table" && (
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-                    <colgroup><col style={{ width: 110 }}/><col style={{ width: 110 }}/><col style={{ width: 200 }}/><col style={{ width: 70 }}/><col /></colgroup>
-                    <thead><tr>{["의사명","진료과","외래 일정","진료실","비고"].map(h => <th key={h} style={s.th}>{h}</th>)}</tr></thead>
+                    <colgroup><col style={{ width: 105 }}/><col style={{ width: 100 }}/><col style={{ width: 190 }}/><col style={{ width: 65 }}/><col style={{ width: 130 }}/><col /></colgroup>
+                    <thead><tr>{["의사명","진료과","외래 일정","진료실","휴진","비고"].map(h => <th key={h} style={s.th}>{h}</th>)}</tr></thead>
                     <tbody>
                       {filtered.length === 0
-                        ? <tr><td colSpan={5} style={{ ...s.td, textAlign: "center", color: "#bbb", padding: "2rem" }}>검색 결과가 없습니다</td></tr>
+                        ? <tr><td colSpan={6} style={{ ...s.td, textAlign: "center", color: "#bbb", padding: "2rem" }}>검색 결과가 없습니다</td></tr>
                         : filtered.map((d, i) => {
                           const isEditing = editingDoctor?.name === d.name && editingDoctor?.department === d.department;
                           const deptC = d.department ? deptColor(d.department, allDepts) : null;
@@ -856,6 +873,10 @@ export default function App() {
                                 : (d.schedule||[]).map((sc, j) => <span key={j} style={sc.period === "PM" ? s.pillPM : s.pillAM}>{sc.day} {sc.period === "PM" ? "오후" : "오전"}</span>)
                               }</td>
                               <td style={{ ...s.td, fontFamily: "monospace", fontSize: 12 }}>{d.room||"-"}</td>
+                              <td style={s.td}>{!(d.closedDates||[]).length
+                                ? <span style={{ color: "#ddd", fontSize: 12 }}>-</span>
+                                : (d.closedDates||[]).map((cd, j) => <span key={j} style={s.closedPill}>🚫 {cd}</span>)
+                              }</td>
                               <td style={{ ...s.td, fontSize: 12, color: "#666" }}>{d.notes||"-"}</td>
                             </tr>
                           );
