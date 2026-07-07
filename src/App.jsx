@@ -213,6 +213,14 @@ function deptColor(dept, allDepts) {
   return DEPT_PALETTE[(idx < 0 ? 0 : idx) % DEPT_PALETTE.length];
 }
 
+// 수동 요일 토글(closedDays)과 AI 추출 휴진 문구(closedDates)를 하나의 표시용 문자열로 합침
+function closedSummary(d) {
+  const parts = [];
+  if ((d.closedDays||[]).length) parts.push("매주 " + d.closedDays.join(",") + "요일");
+  if ((d.closedDates||[]).length) parts.push(d.closedDates.join(", "));
+  return parts.join(" / ");
+}
+
 function DayView({ doctors, search, deptFilters, dayFilters, allDepts }) {
   const activeDays = dayFilters.length > 0 ? ALL_DAYS.filter(d => dayFilters.includes(d)) : ALL_DAYS;
   const multiDept = deptFilters.length > 1;
@@ -274,12 +282,16 @@ function DayView({ doctors, search, deptFilters, dayFilters, allDepts }) {
                         ? <span style={{ color: "#e0e0e0", fontSize: 12, display: "block", textAlign: "center", paddingTop: 6 }}>—</span>
                         : list.map((d, i) => {
                           const c = multiDept ? deptColor(d.department, allDepts) : null;
-                          const bg = c ? c.bg : (period === "AM" ? "#D9F4F7" : "#FAEEDA");
-                          const border = c ? c.border : (period === "AM" ? "#77CED9" : "#FAC775");
+                          const isClosed = (d.closedDays||[]).includes(day);
+                          const bg = isClosed ? "#FBE9E9" : (c ? c.bg : (period === "AM" ? "#D9F4F7" : "#FAEEDA"));
+                          const border = isClosed ? "#E3A6A6" : (c ? c.border : (period === "AM" ? "#77CED9" : "#FAC775"));
                           return (
-                            <div key={i} style={{ marginBottom: 4, padding: "4px 6px", borderRadius: 6, background: bg, border: `0.5px solid ${border}` }}>
-                              <div style={{ fontSize: 12, fontWeight: 600, color: "#111", lineHeight: 1.3 }}>{d.name}</div>
+                            <div key={i} style={{ marginBottom: 4, padding: "4px 6px", borderRadius: 6, background: bg, border: `0.5px solid ${border}`, opacity: isClosed ? 0.8 : 1 }}>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: "#111", lineHeight: 1.3, textDecoration: isClosed ? "line-through" : "none" }}>{d.name}</div>
                               <div style={{ fontSize: 10, color: c ? c.text : "#888", fontWeight: c ? 600 : 400, marginTop: 1 }}>{d.department}{d.room ? ` · ${d.room}호` : ""}</div>
+                              {isClosed && (
+                                <div style={{ fontSize: 9, color: "#791F1F", fontWeight: 700, marginTop: 2 }}>🚫 {day}요일 휴진</div>
+                              )}
                               {(d.closedDates||[]).length > 0 && (
                                 <div style={{ fontSize: 9, color: "#791F1F", fontWeight: 700, marginTop: 2 }}>🚫 {d.closedDates.join(", ")}</div>
                               )}
@@ -361,6 +373,15 @@ export default function App() {
       ));
     }
     setEditingDoctor(null);
+  };
+
+  const toggleClosedDay = (doc, day) => {
+    setDoctors(prev => prev.map(d => {
+      if (d.name !== doc.name || d.department !== doc.department) return d;
+      const set = new Set(d.closedDays || []);
+      if (set.has(day)) set.delete(day); else set.add(day);
+      return { ...d, closedDays: ALL_DAYS.filter(x => set.has(x)) };
+    }));
   };
 
   const saveApiKey = () => {
@@ -449,7 +470,7 @@ export default function App() {
             : td("",  rowBg,   "#ddd", true);
         }),
         td(d.room||"",  rowBg, "#555", true),
-        td((d.closedDates||[]).join(", "), rowBg, "#791F1F"),
+        td(closedSummary(d), rowBg, "#791F1F"),
         td(d.notes||"", rowBg, "#666"),
       ].join("");
       return `<tr>${cells}</tr>`;
@@ -495,7 +516,7 @@ export default function App() {
       const cells = days.map(day => {
         const cell = matrix[day + "_" + period];
         const inner = cell.length
-          ? cell.map(d => "<div class='doc " + (period==="AM"?"am":"pm") + "'><span class='dn'>" + esc(d.name) + "</span><span class='dd'>" + esc(d.department) + (d.room ? " · " + esc(d.room) + "호" : "") + "</span>" + ((d.closedDates && d.closedDates.length) ? "<span class='cd'>🚫 " + esc(d.closedDates.join(', ')) + "</span>" : "") + "</div>").join("")
+          ? cell.map(d => "<div class='doc " + (period==="AM"?"am":"pm") + "'><span class='dn'>" + esc(d.name) + "</span><span class='dd'>" + esc(d.department) + (d.room ? " · " + esc(d.room) + "호" : "") + "</span>" + ((d.closedDays && d.closedDays.includes(day)) ? "<span class='cd'>🚫 " + esc(day) + "요일 휴진</span>" : "") + ((d.closedDates && d.closedDates.length) ? "<span class='cd'>🚫 " + esc(d.closedDates.join(', ')) + "</span>" : "") + "</div>").join("")
           : "<span class='empty'>—</span>";
         return "<td class='cell'>" + inner + "</td>";
       }).join("");
@@ -504,7 +525,7 @@ export default function App() {
 
     const listRows = list.map((d, i) => {
       const sched = (d.schedule||[]).map(sc => "<span class='pill " + (sc.period==="PM"?"pm":"am") + "'>" + esc(sc.day) + (sc.period==="PM"?"오후":"오전") + "</span>").join(" ");
-      const closed = (d.closedDates||[]).length ? esc(d.closedDates.join(', ')) : "-";
+      const closed = esc(closedSummary(d)) || "-";
       return "<tr class='" + (i%2?"odd":"") + "'><td class='c-name'>" + esc(d.name) + "</td><td><span class='dept'>" + esc(d.department) + "</span></td><td>" + (sched || "<span class='muted'>정보 없음</span>") + "</td><td class='c-room'>" + esc(d.room||"-") + "</td><td class='c-closed'>" + closed + "</td><td class='c-note'>" + esc(d.notes||"-") + "</td></tr>";
     }).join("");
 
@@ -606,7 +627,7 @@ export default function App() {
   const copyTable = () => {
     const rows = filtered.map(d => {
       const sched = (d.schedule||[]).map(s => s.day + (s.period === "PM" ? "오후" : "오전")).join(", ");
-      const closed = (d.closedDates||[]).join("; ");
+      const closed = closedSummary(d);
       return [d.name, d.department, sched, d.room||"", closed, d.notes||""].join("\t");
     });
     navigator.clipboard.writeText(["의사명\t진료과\t외래일정\t진료실\t휴진\t비고", ...rows].join("\n"))
@@ -873,10 +894,24 @@ export default function App() {
                                 : (d.schedule||[]).map((sc, j) => <span key={j} style={sc.period === "PM" ? s.pillPM : s.pillAM}>{sc.day} {sc.period === "PM" ? "오후" : "오전"}</span>)
                               }</td>
                               <td style={{ ...s.td, fontFamily: "monospace", fontSize: 12 }}>{d.room||"-"}</td>
-                              <td style={s.td}>{!(d.closedDates||[]).length
-                                ? <span style={{ color: "#ddd", fontSize: 12 }}>-</span>
-                                : (d.closedDates||[]).map((cd, j) => <span key={j} style={s.closedPill}>🚫 {cd}</span>)
-                              }</td>
+                              <td style={s.td}>
+                                {!(d.closedDates||[]).length
+                                  ? null
+                                  : <div style={{ marginBottom: 3 }}>{(d.closedDates||[]).map((cd, j) => <span key={j} style={s.closedPill}>🚫 {cd}</span>)}</div>
+                                }
+                                <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+                                  {ALL_DAYS.map(day => {
+                                    const active = (d.closedDays||[]).includes(day);
+                                    return (
+                                      <button key={day} onClick={() => toggleClosedDay(d, day)}
+                                        title={`${day}요일 휴진 ${active ? "해제" : "표시"}`}
+                                        style={{ width: 18, height: 18, borderRadius: 4, border: `0.5px solid ${active ? "#C23A3A" : "#ddd"}`, background: active ? "#791F1F" : "#fff", color: active ? "#fff" : "#bbb", fontSize: 9, fontWeight: 700, cursor: "pointer", padding: 0, lineHeight: "16px" }}>
+                                        {day}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </td>
                               <td style={{ ...s.td, fontSize: 12, color: "#666" }}>{d.notes||"-"}</td>
                             </tr>
                           );
