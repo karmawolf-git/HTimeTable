@@ -82,10 +82,6 @@ const DOCTORS_SCHEMA = {
           },
           room:  { type: "STRING" },
           notes: { type: "STRING" },
-          closedDates: {
-            type: "ARRAY",
-            items: { type: "STRING" },
-          },
         },
         required: ["name","department","schedule"],
       },
@@ -104,9 +100,7 @@ const PROMPT_ALL_DOCTORS = `이 이미지는 병원 외래 스케줄 표입니�
   예) 현 vs 원 (초성 ㅎ vs ㅇ), 성 vs 생 (종성 유무), 환 vs 관
 • 진료과는 이미지에 표시된 그대로 입력하세요 (없는 진료과 절대 추가 금지)
 • schedule에는 외래 진료가 실제로 있는 요일/시간대만 포함하세요
-• 진료 없는 날/시간대는 schedule에서 제외하세요
-• 이미지에 특정 날짜의 휴진 안내가 있다면(예: "8/15 휴진", "9/1~9/3 학회참석으로 휴진") 해당 의사의 closedDates에 원문 그대로 추출하세요
-• 휴진 안내가 없으면 closedDates는 빈 배열로 두세요`;
+• 진료 없는 날/시간대는 schedule에서 제외하세요`;
 
 const XLS_DAYS = ["월","화","수","목","금","토"];
 const XLS_SLOTS = XLS_DAYS.flatMap(d => [`${d}오전`, `${d}오후`]);
@@ -213,12 +207,9 @@ function deptColor(dept, allDepts) {
   return DEPT_PALETTE[(idx < 0 ? 0 : idx) % DEPT_PALETTE.length];
 }
 
-// 수동 요일 토글(closedDays)과 AI 추출 휴진 문구(closedDates)를 하나의 표시용 문자열로 합침
+// 수동으로 토글한 휴진 요일을 표시용 문자열로 변환
 function closedSummary(d) {
-  const parts = [];
-  if ((d.closedDays||[]).length) parts.push("매주 " + d.closedDays.join(",") + "요일");
-  if ((d.closedDates||[]).length) parts.push(d.closedDates.join(", "));
-  return parts.join(" / ");
+  return (d.closedDays||[]).length ? "매주 " + d.closedDays.join(",") + "요일" : "";
 }
 
 function DayView({ doctors, search, deptFilters, dayFilters, allDepts }) {
@@ -291,9 +282,6 @@ function DayView({ doctors, search, deptFilters, dayFilters, allDepts }) {
                               <div style={{ fontSize: 10, color: c ? c.text : "#888", fontWeight: c ? 600 : 400, marginTop: 1 }}>{d.department}{d.room ? ` · ${d.room}호` : ""}</div>
                               {isClosed && (
                                 <div style={{ fontSize: 9, color: "#791F1F", fontWeight: 700, marginTop: 2 }}>🚫 {day}요일 휴진</div>
-                              )}
-                              {(d.closedDates||[]).length > 0 && (
-                                <div style={{ fontSize: 9, color: "#791F1F", fontWeight: 700, marginTop: 2 }}>🚫 {d.closedDates.join(", ")}</div>
                               )}
                             </div>
                           );
@@ -516,7 +504,7 @@ export default function App() {
       const cells = days.map(day => {
         const cell = matrix[day + "_" + period];
         const inner = cell.length
-          ? cell.map(d => "<div class='doc " + (period==="AM"?"am":"pm") + "'><span class='dn'>" + esc(d.name) + "</span><span class='dd'>" + esc(d.department) + (d.room ? " · " + esc(d.room) + "호" : "") + "</span>" + ((d.closedDays && d.closedDays.includes(day)) ? "<span class='cd'>🚫 " + esc(day) + "요일 휴진</span>" : "") + ((d.closedDates && d.closedDates.length) ? "<span class='cd'>🚫 " + esc(d.closedDates.join(', ')) + "</span>" : "") + "</div>").join("")
+          ? cell.map(d => "<div class='doc " + (period==="AM"?"am":"pm") + "'><span class='dn'>" + esc(d.name) + "</span><span class='dd'>" + esc(d.department) + (d.room ? " · " + esc(d.room) + "호" : "") + "</span>" + ((d.closedDays && d.closedDays.includes(day)) ? "<span class='cd'>🚫 " + esc(day) + "요일 휴진</span>" : "") + "</div>").join("")
           : "<span class='empty'>—</span>";
         return "<td class='cell'>" + inner + "</td>";
       }).join("");
@@ -592,7 +580,6 @@ export default function App() {
                   ).map(s => ({ day: s.day, period: s.period === "오후" ? "PM" : "AM" })),
                   room: d.room?.trim() || null,
                   notes: d.notes?.trim() || null,
-                  closedDates: (d.closedDates || []).map(x => String(x).trim()).filter(Boolean),
                 });
               });
             } else {
@@ -652,7 +639,6 @@ export default function App() {
     td: { padding: "10px 12px", borderBottom: "0.5px solid #f5f5f5", color: "#222", verticalAlign: "top", wordBreak: "keep-all", fontSize: 13 },
     pillAM: { display: "inline-block", margin: "2px 2px 2px 0", padding: "2px 7px", borderRadius: 4, fontSize: 11, background: "#D9F4F7", color: "#076478", border: "0.5px solid #77CED9" },
     pillPM: { display: "inline-block", margin: "2px 2px 2px 0", padding: "2px 7px", borderRadius: 4, fontSize: 11, background: "#FAEEDA", color: "#633806", border: "0.5px solid #FAC775" },
-    closedPill: { display: "inline-block", margin: "2px 2px 2px 0", padding: "2px 7px", borderRadius: 4, fontSize: 11, fontWeight: 600, background: "#FCEBEB", color: "#791F1F", border: "0.5px solid #F7C1C1" },
     deptBadge: { display: "inline-block", padding: "2px 7px", borderRadius: 4, fontSize: 11, background: "#f4f4f4", border: "0.5px solid #ddd", color: "#666" },
     countBadge: { display: "inline-flex", alignItems: "center", padding: "2px 8px", borderRadius: 20, fontSize: 11, fontWeight: 500, background: "#77CED9", color: "#076478" },
     filterInput: { flex: 1, minWidth: 140, padding: "6px 10px", fontSize: 13, border: "0.5px solid #ddd", borderRadius: 8, background: "#f9f9f9", color: "#222", outline: "none" },
@@ -895,10 +881,6 @@ export default function App() {
                               }</td>
                               <td style={{ ...s.td, fontFamily: "monospace", fontSize: 12 }}>{d.room||"-"}</td>
                               <td style={s.td}>
-                                {!(d.closedDates||[]).length
-                                  ? null
-                                  : <div style={{ marginBottom: 3 }}>{(d.closedDates||[]).map((cd, j) => <span key={j} style={s.closedPill}>🚫 {cd}</span>)}</div>
-                                }
                                 <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
                                   {ALL_DAYS.map(day => {
                                     const active = (d.closedDays||[]).includes(day);
