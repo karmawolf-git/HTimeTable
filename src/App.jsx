@@ -664,7 +664,10 @@ export default function App() {
             <path d="M19 13v10M14 18h10" stroke="rgba(235,70,80,0.92)" strokeWidth="3" strokeLinecap="round"/>
           </svg>
         </div>
-        <div style={{ color: "#fff", fontSize: 20, fontWeight: 700, letterSpacing: "-0.3px" }}>Hospital TimeTable</div>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 7, flexWrap: "wrap" }}>
+          <span style={{ color: "#fff", fontSize: 20, fontWeight: 700, letterSpacing: "-0.3px" }}>병원 외래 시간표</span>
+          <span style={{ color: "rgba(255,255,255,0.65)", fontSize: 12, fontWeight: 500 }}>(Hospital TimeTable)</span>
+        </div>
         <div style={{ color: "rgba(255,255,255,0.72)", fontSize: 12, marginTop: 3 }}>병원 진료 일정과 시간표를 한눈에 정리·관리할 수 있는 스케줄 뷰어입니다</div>
         <div style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(220,50,50,0.22)", border: "0.5px solid rgba(255,150,150,0.45)", color: "rgba(255,210,210,0.95)", fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 20, letterSpacing: "0.08em" }}>
           🔒 INTERNAL USE ONLY
